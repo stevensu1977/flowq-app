@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![FlowQ](src-tauri/icons/icon.png)
+<img src="src-tauri/icons/icon.png" width="128" height="128" alt="FlowQ">
 
 ### Your local AI workspace, in flow.
 
