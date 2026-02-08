@@ -1,0 +1,888 @@
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use claude_agent_sdk::{query, ClaudeAgentOptions, ContentBlock, Message as ClaudeMessage, PermissionMode, SessionId};
+use futures::StreamExt;
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter, Manager, State};
+use uuid::Uuid;
+
+mod chat;
+mod db;
+mod mcp;
+mod skill;
+
+use chat::{ApiConfig, ChatClient, ChatMessage as SimpleChatMessage, ChatRequest, ChatResponse};
+use db::{ChatDatabase, DbSession, DbMessage};
+use mcp::{McpManager, McpServerInfo, AddMcpServerRequest};
+use skill::{SkillManager, SkillInfo, SkillMetadata, FileItem, SearchSkill};
+
+// ============ Types ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Session {
+    pub id: String,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub is_processing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub id: String,
+    pub session_id: String,
+    pub role: String, // "user" | "assistant"
+    pub content: String,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionEvent {
+    pub event_type: String, // "text_delta" | "complete" | "error"
+    pub session_id: String,
+    pub data: serde_json::Value,
+}
+
+// ============ State ============
+
+pub struct AppState {
+    sessions: Mutex<HashMap<String, Session>>,
+    messages: Mutex<HashMap<String, Vec<Message>>>,
+    workspace: Mutex<Option<String>>,
+    db: Arc<ChatDatabase>,
+}
+
+impl AppState {
+    pub fn new(db: ChatDatabase) -> Self {
+        Self {
+            sessions: Mutex::new(HashMap::new()),
+            messages: Mutex::new(HashMap::new()),
+            workspace: Mutex::new(None),
+            db: Arc::new(db),
+        }
+    }
+}
+
+// ============ File Commands ============
+
+#[tauri::command]
+async fn read_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+async fn save_file(path: String, content: String) -> Result<(), String> {
+    if let Some(parent) = PathBuf::from(&path).parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+    }
+    fs::write(&path, content).map_err(|e| format!("Failed to write file: {}", e))
+}
+
+#[tauri::command]
+fn get_home_dir() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "Could not determine home directory".to_string())
+}
+
+#[tauri::command]
+fn get_data_dir() -> Result<String, String> {
+    dirs::data_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "Could not determine data directory".to_string())
+}
+
+#[tauri::command]
+fn get_config_dir() -> Result<String, String> {
+    dirs::config_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "Could not determine config directory".to_string())
+}
+
+#[tauri::command]
+async fn file_exists(path: String) -> bool {
+    PathBuf::from(&path).exists()
+}
+
+#[tauri::command]
+async fn list_dir(path: String) -> Result<Vec<String>, String> {
+    let entries = fs::read_dir(&path).map_err(|e| format!("Failed to read directory: {}", e))?;
+    let mut files = Vec::new();
+    for entry in entries {
+        if let Ok(entry) = entry {
+            // Only return the file/directory name, not the full path
+            if let Some(name) = entry.file_name().to_str() {
+                files.push(name.to_string());
+            }
+        }
+    }
+    Ok(files)
+}
+
+#[tauri::command]
+async fn create_dir(path: String) -> Result<(), String> {
+    fs::create_dir_all(&path).map_err(|e| format!("Failed to create directory: {}", e))
+}
+
+#[tauri::command]
+async fn remove_file(path: String) -> Result<(), String> {
+    fs::remove_file(&path).map_err(|e| format!("Failed to remove file: {}", e))
+}
+
+#[tauri::command]
+async fn remove_dir(path: String) -> Result<(), String> {
+    fs::remove_dir_all(&path).map_err(|e| format!("Failed to remove directory: {}", e))
+}
+
+// ============ Session Commands ============
+
+#[tauri::command]
+fn get_sessions(state: State<AppState>) -> Vec<Session> {
+    let sessions = state.sessions.lock().unwrap();
+    sessions.values().cloned().collect()
+}
+
+#[tauri::command]
+fn create_session(state: State<AppState>, title: Option<String>) -> Session {
+    let id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let session = Session {
+        id: id.clone(),
+        title: title.unwrap_or_else(|| "New Chat".to_string()),
+        created_at: now.clone(),
+        updated_at: now,
+        is_processing: false,
+    };
+
+    let mut sessions = state.sessions.lock().unwrap();
+    sessions.insert(id.clone(), session.clone());
+
+    let mut messages = state.messages.lock().unwrap();
+    messages.insert(id, Vec::new());
+
+    session
+}
+
+#[tauri::command]
+fn delete_session(state: State<AppState>, session_id: String) -> bool {
+    let mut sessions = state.sessions.lock().unwrap();
+    let mut messages = state.messages.lock().unwrap();
+    sessions.remove(&session_id);
+    messages.remove(&session_id);
+    true
+}
+
+#[tauri::command]
+fn get_session_messages(state: State<AppState>, session_id: String) -> Vec<Message> {
+    let messages = state.messages.lock().unwrap();
+    messages.get(&session_id).cloned().unwrap_or_default()
+}
+
+// ============ Workspace Commands ============
+
+#[tauri::command]
+fn set_workspace(state: State<AppState>, path: String) -> Result<(), String> {
+    // Verify the path exists
+    if !PathBuf::from(&path).exists() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+    let mut workspace = state.workspace.lock().unwrap();
+    *workspace = Some(path.clone());
+    log::info!("Workspace set to: {}", path);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_workspace(state: State<AppState>) -> Option<String> {
+    let workspace = state.workspace.lock().unwrap();
+    workspace.clone()
+}
+
+// ============ Database Commands ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionWithMessages {
+    pub session: DbSession,
+    pub messages: Vec<DbMessage>,
+}
+
+#[tauri::command]
+fn db_create_session(
+    state: State<AppState>,
+    workspace_path: Option<String>,
+    title: String,
+) -> Result<DbSession, String> {
+    let now = chrono::Utc::now().to_rfc3339();
+    let session = DbSession {
+        id: Uuid::new_v4().to_string(),
+        workspace_path,
+        title,
+        created_at: now.clone(),
+        updated_at: now,
+        summary: None,
+        is_flagged: Some(false),
+        status: Some("todo".to_string()),
+        has_unread: Some(false),
+    };
+
+    state.db.create_session(&session)
+        .map_err(|e| format!("Failed to create session: {}", e))?;
+
+    Ok(session)
+}
+
+#[tauri::command]
+fn db_get_sessions(
+    state: State<AppState>,
+    workspace_path: Option<String>,
+) -> Result<Vec<DbSession>, String> {
+    state.db.get_sessions_by_workspace(workspace_path.as_deref())
+        .map_err(|e| format!("Failed to get sessions: {}", e))
+}
+
+#[tauri::command]
+fn db_get_session(
+    state: State<AppState>,
+    session_id: String,
+) -> Result<Option<DbSession>, String> {
+    state.db.get_session(&session_id)
+        .map_err(|e| format!("Failed to get session: {}", e))
+}
+
+#[tauri::command]
+fn db_update_session(
+    state: State<AppState>,
+    session: DbSession,
+) -> Result<(), String> {
+    state.db.update_session(&session)
+        .map_err(|e| format!("Failed to update session: {}", e))
+}
+
+#[tauri::command]
+fn db_delete_session(
+    state: State<AppState>,
+    session_id: String,
+) -> Result<(), String> {
+    state.db.delete_session(&session_id)
+        .map_err(|e| format!("Failed to delete session: {}", e))
+}
+
+#[tauri::command]
+fn db_append_message(
+    state: State<AppState>,
+    message: DbMessage,
+) -> Result<(), String> {
+    state.db.append_message(&message)
+        .map_err(|e| format!("Failed to append message: {}", e))
+}
+
+#[tauri::command]
+fn db_get_messages(
+    state: State<AppState>,
+    session_id: String,
+) -> Result<Vec<DbMessage>, String> {
+    state.db.get_messages(&session_id)
+        .map_err(|e| format!("Failed to get messages: {}", e))
+}
+
+#[tauri::command]
+fn db_get_recent_messages(
+    state: State<AppState>,
+    session_id: String,
+    limit: u32,
+) -> Result<Vec<DbMessage>, String> {
+    state.db.get_recent_messages(&session_id, limit)
+        .map_err(|e| format!("Failed to get recent messages: {}", e))
+}
+
+#[tauri::command]
+fn db_update_message_metadata(
+    state: State<AppState>,
+    message_id: String,
+    metadata: String,
+) -> Result<(), String> {
+    state.db.update_message_metadata(&message_id, &metadata)
+        .map_err(|e| format!("Failed to update message metadata: {}", e))
+}
+
+#[tauri::command]
+fn db_get_session_with_messages(
+    state: State<AppState>,
+    session_id: String,
+) -> Result<Option<SessionWithMessages>, String> {
+    let session = state.db.get_session(&session_id)
+        .map_err(|e| format!("Failed to get session: {}", e))?;
+
+    if let Some(session) = session {
+        let messages = state.db.get_messages(&session_id)
+            .map_err(|e| format!("Failed to get messages: {}", e))?;
+        Ok(Some(SessionWithMessages { session, messages }))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+fn db_update_session_flag(
+    state: State<AppState>,
+    session_id: String,
+    is_flagged: bool,
+) -> Result<(), String> {
+    state.db.update_session_flag(&session_id, is_flagged)
+        .map_err(|e| format!("Failed to update session flag: {}", e))
+}
+
+#[tauri::command]
+fn db_update_session_status(
+    state: State<AppState>,
+    session_id: String,
+    status: String,
+) -> Result<(), String> {
+    state.db.update_session_status(&session_id, &status)
+        .map_err(|e| format!("Failed to update session status: {}", e))
+}
+
+#[tauri::command]
+fn db_update_session_unread(
+    state: State<AppState>,
+    session_id: String,
+    has_unread: bool,
+) -> Result<(), String> {
+    state.db.update_session_unread(&session_id, has_unread)
+        .map_err(|e| format!("Failed to update session unread: {}", e))
+}
+
+#[tauri::command]
+fn db_get_flagged_sessions(
+    state: State<AppState>,
+    workspace_path: Option<String>,
+) -> Result<Vec<DbSession>, String> {
+    state.db.get_flagged_sessions(workspace_path.as_deref())
+        .map_err(|e| format!("Failed to get flagged sessions: {}", e))
+}
+
+#[tauri::command]
+fn db_get_sessions_by_status(
+    state: State<AppState>,
+    workspace_path: Option<String>,
+    status: String,
+) -> Result<Vec<DbSession>, String> {
+    state.db.get_sessions_by_status(workspace_path.as_deref(), &status)
+        .map_err(|e| format!("Failed to get sessions by status: {}", e))
+}
+
+// ============ MCP Commands ============
+
+#[tauri::command]
+fn mcp_list_servers() -> Result<Vec<McpServerInfo>, String> {
+    McpManager::list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mcp_add_server(config: AddMcpServerRequest) -> Result<(), String> {
+    McpManager::add(config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mcp_remove_server(name: String) -> Result<(), String> {
+    McpManager::remove(&name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mcp_toggle_server(name: String, disabled: bool) -> Result<(), String> {
+    McpManager::toggle(&name, disabled).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mcp_update_server(name: String, config: AddMcpServerRequest) -> Result<(), String> {
+    McpManager::update(&name, config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn mcp_get_server(name: String) -> Result<Option<McpServerInfo>, String> {
+    McpManager::get(&name).map_err(|e| e.to_string())
+}
+
+// ============ Skills Commands ============
+
+#[tauri::command]
+fn skill_list() -> Result<Vec<SkillInfo>, String> {
+    SkillManager::list().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_get_content(name: String) -> Result<String, String> {
+    SkillManager::get_content(&name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_get_metadata(name: String) -> Result<Option<SkillMetadata>, String> {
+    SkillManager::get_metadata(&name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_list_files(name: String, subpath: Option<String>) -> Result<Vec<FileItem>, String> {
+    SkillManager::list_files(&name, subpath.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_read_file(name: String, file_path: String) -> Result<String, String> {
+    SkillManager::read_file(&name, &file_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_install_from_content(content: String, filename: String) -> Result<String, String> {
+    SkillManager::install_from_content(&content, &filename).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn skill_install_from_url(url: String) -> Result<String, String> {
+    SkillManager::install_from_url(&url).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_install_from_zip(zip_base64: String, source: String) -> Result<String, String> {
+    SkillManager::install_from_zip(&zip_base64, &source).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_delete(name: String) -> Result<(), String> {
+    SkillManager::delete(&name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn skill_open_folder(name: String) -> Result<(), String> {
+    SkillManager::open_folder(&name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn skill_search(query: String) -> Result<Vec<SearchSkill>, String> {
+    SkillManager::search(&query).await.map_err(|e| e.to_string())
+}
+
+// ============ API Settings ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiSettings {
+    pub provider: String,  // "anthropic" | "bedrock"
+    // Anthropic settings
+    pub anthropic_api_key: Option<String>,
+    pub anthropic_base_url: Option<String>,
+    pub anthropic_model: Option<String>,
+    // Bedrock settings
+    pub bedrock_region: Option<String>,
+    pub bedrock_auth_method: Option<String>,  // "profile" | "access_key"
+    pub bedrock_profile: Option<String>,
+    pub bedrock_access_key_id: Option<String>,
+    pub bedrock_secret_access_key: Option<String>,
+    pub bedrock_model: Option<String>,
+}
+
+// ============ Simple Chat Commands ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SimpleChatRequest {
+    pub messages: Vec<SimpleChatMessage>,
+    pub provider: String,
+    pub api_key: Option<String>,
+    pub base_url: Option<String>,
+    pub model: Option<String>,
+    pub region: Option<String>,
+    pub aws_profile: Option<String>,
+    pub system_prompt: Option<String>,
+    pub max_tokens: Option<u32>,
+    pub temperature: Option<f32>,
+}
+
+#[tauri::command]
+async fn chat_send(request: SimpleChatRequest) -> Result<ChatResponse, String> {
+    log::info!("chat_send called with provider: {}", request.provider);
+
+    let client = ChatClient::new();
+    let chat_request = ChatRequest {
+        messages: request.messages,
+        config: ApiConfig {
+            provider: request.provider,
+            api_key: request.api_key,
+            base_url: request.base_url,
+            model: request.model,
+            region: request.region,
+            aws_profile: request.aws_profile,
+        },
+        system_prompt: request.system_prompt,
+        max_tokens: request.max_tokens,
+        temperature: request.temperature,
+    };
+
+    client.send(chat_request).await
+}
+
+// ============ Claude Agent Commands ============
+
+#[tauri::command]
+async fn send_message(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    content: String,
+    system_prompt: Option<String>,
+    api_settings: Option<ApiSettings>,
+) -> Result<String, String> {
+    // Create user message
+    let user_msg_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().to_rfc3339();
+    let user_message = Message {
+        id: user_msg_id.clone(),
+        session_id: session_id.clone(),
+        role: "user".to_string(),
+        content: content.clone(),
+        timestamp: now.clone(),
+    };
+
+    // Check if this is a continuation of an existing conversation
+    let has_history = {
+        let messages = state.messages.lock().unwrap();
+        messages.get(&session_id).map(|m| !m.is_empty()).unwrap_or(false)
+    };
+
+    // Add user message
+    {
+        let mut messages = state.messages.lock().unwrap();
+        if let Some(session_messages) = messages.get_mut(&session_id) {
+            session_messages.push(user_message);
+        }
+    }
+
+    // Mark session as processing
+    {
+        let mut sessions = state.sessions.lock().unwrap();
+        if let Some(session) = sessions.get_mut(&session_id) {
+            session.is_processing = true;
+        }
+    }
+
+    // Get current workspace
+    let workspace_path = {
+        let workspace = state.workspace.lock().unwrap();
+        workspace.clone()
+    };
+
+    // Build options with conversation continuation
+    let mut options_builder = ClaudeAgentOptions::builder()
+        .permission_mode(PermissionMode::BypassPermissions);  // 跳过权限提示，避免超时
+
+    // If this is a continuation, use --continue flag to maintain conversation state
+    // The CLI will automatically manage conversation history
+    if has_history {
+        log::info!("Continuing conversation for session: {}", session_id);
+        options_builder = options_builder.continue_conversation(true);
+        // Also try to resume from the session ID if CLI supports it
+        options_builder = options_builder.resume(SessionId::new(session_id.clone()));
+    }
+
+    // Set working directory if workspace is set
+    if let Some(ref ws_path) = workspace_path {
+        log::info!("Using workspace directory: {}", ws_path);
+        options_builder = options_builder.cwd(ws_path.as_str());
+    }
+
+    if let Some(prompt) = system_prompt {
+        options_builder = options_builder.system_prompt(prompt.as_str());
+    }
+
+    // Load MCP servers from ~/.claude.json
+    if let Some(home) = dirs::home_dir() {
+        let mcp_config_path = home.join(".claude.json");
+        if mcp_config_path.exists() {
+            log::info!("Loading MCP config from: {:?}", mcp_config_path);
+            options_builder = options_builder.mcp_servers_path(mcp_config_path);
+        }
+    }
+
+    // Apply API settings (provider, model, credentials)
+    if let Some(ref settings) = api_settings {
+        log::info!("Applying API settings: provider={}", settings.provider);
+
+        if settings.provider == "bedrock" {
+            // For Bedrock, set model and AWS credentials via environment variables
+            if let Some(ref model) = settings.bedrock_model {
+                options_builder = options_builder.model(model.clone());
+            }
+            if let Some(ref region) = settings.bedrock_region {
+                options_builder = options_builder.env("AWS_REGION", region.clone());
+                options_builder = options_builder.env("AWS_DEFAULT_REGION", region.clone());
+            }
+            // Set AWS credentials based on auth method
+            if settings.bedrock_auth_method.as_deref() == Some("access_key") {
+                if let Some(ref access_key) = settings.bedrock_access_key_id {
+                    options_builder = options_builder.env("AWS_ACCESS_KEY_ID", access_key.clone());
+                }
+                if let Some(ref secret_key) = settings.bedrock_secret_access_key {
+                    options_builder = options_builder.env("AWS_SECRET_ACCESS_KEY", secret_key.clone());
+                }
+            } else if let Some(ref profile) = settings.bedrock_profile {
+                // Use AWS profile
+                options_builder = options_builder.env("AWS_PROFILE", profile.clone());
+            }
+            // Tell Claude Code to use Bedrock provider
+            options_builder = options_builder.env("CLAUDE_CODE_USE_BEDROCK", "1");
+        } else {
+            // For Anthropic direct API
+            if let Some(ref model) = settings.anthropic_model {
+                options_builder = options_builder.model(model.clone());
+            }
+            if let Some(ref api_key) = settings.anthropic_api_key {
+                options_builder = options_builder.env("ANTHROPIC_API_KEY", api_key.clone());
+            }
+            if let Some(ref base_url) = settings.anthropic_base_url {
+                options_builder = options_builder.env("ANTHROPIC_BASE_URL", base_url.clone());
+            }
+        }
+    }
+
+    let options = options_builder.build();
+
+    // Query Claude - let CLI handle conversation history
+    log::info!("Querying Claude, has_history: {}", has_history);
+    let stream = query(&content, Some(options))
+        .await
+        .map_err(|e| {
+            log::error!("Failed to query Claude: {}", e);
+            format!("Failed to query Claude: {}", e)
+        })?;
+    let mut stream = Box::pin(stream);
+
+    let mut assistant_content = String::new();
+    let assistant_msg_id = Uuid::new_v4().to_string();
+
+    log::info!("Starting to process stream...");
+
+    // Process stream
+    while let Some(message) = stream.next().await {
+        log::info!("Received message: {:?}", message);
+        match message {
+            Ok(ClaudeMessage::Assistant { message, .. }) => {
+                log::info!("Assistant message received with {} content blocks", message.content.len());
+                for block in &message.content {
+                    match block {
+                        ContentBlock::Text { text } => {
+                            log::info!("Text block: {}", text);
+                            assistant_content.push_str(text);
+                            // Emit text delta event to main window
+                            log::info!("Emitting text_delta event for session: {}", session_id);
+                            let event_data = SessionEvent {
+                                event_type: "text_delta".to_string(),
+                                session_id: session_id.clone(),
+                                data: serde_json::json!({
+                                    "text": assistant_content,
+                                    "message_id": assistant_msg_id
+                                }),
+                            };
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.emit("session-event", &event_data);
+                            } else {
+                                let _ = app.emit("session-event", &event_data);
+                            }
+                        }
+                        ContentBlock::ToolUse { id, name, input } => {
+                            log::info!("Tool use: {} ({}) - input: {:?}", name, id, input);
+                            // Emit tool_use event so UI can show progress
+                            let tool_event = SessionEvent {
+                                event_type: "tool_use".to_string(),
+                                session_id: session_id.clone(),
+                                data: serde_json::json!({
+                                    "tool_id": id,
+                                    "tool_name": name,
+                                    "tool_input": input,
+                                    "message_id": assistant_msg_id
+                                }),
+                            };
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.emit("session-event", &tool_event);
+                            } else {
+                                let _ = app.emit("session-event", &tool_event);
+                            }
+                        }
+                        _ => {
+                            log::info!("Other content block type");
+                        }
+                    }
+                }
+            }
+            Ok(ClaudeMessage::Result { total_cost_usd, num_turns, .. }) => {
+                log::info!("Result received: cost={:?}, turns={:?}", total_cost_usd, num_turns);
+                // Emit complete event to main window
+                let complete_event = SessionEvent {
+                    event_type: "complete".to_string(),
+                    session_id: session_id.clone(),
+                    data: serde_json::json!({
+                        "message_id": assistant_msg_id,
+                        "content": assistant_content,  // Include final content
+                        "cost": total_cost_usd,
+                        "turns": num_turns
+                    }),
+                };
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("session-event", &complete_event);
+                } else {
+                    let _ = app.emit("session-event", &complete_event);
+                }
+                break;
+            }
+            Err(e) => {
+                log::error!("Error in stream: {}", e);
+                // Emit error event to main window
+                let error_event = SessionEvent {
+                    event_type: "error".to_string(),
+                    session_id: session_id.clone(),
+                    data: serde_json::json!({
+                        "error": e.to_string()
+                    }),
+                };
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.emit("session-event", &error_event);
+                } else {
+                    let _ = app.emit("session-event", &error_event);
+                }
+                break;
+            }
+            other => {
+                log::info!("Other message type: {:?}", other);
+            }
+        }
+    }
+    log::info!("Stream processing complete");
+
+    // Save assistant message
+    let assistant_message = Message {
+        id: assistant_msg_id.clone(),
+        session_id: session_id.clone(),
+        role: "assistant".to_string(),
+        content: assistant_content,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    {
+        let mut messages = state.messages.lock().unwrap();
+        if let Some(session_messages) = messages.get_mut(&session_id) {
+            session_messages.push(assistant_message);
+        }
+    }
+
+    // Mark session as not processing
+    {
+        let mut sessions = state.sessions.lock().unwrap();
+        if let Some(session) = sessions.get_mut(&session_id) {
+            session.is_processing = false;
+            session.updated_at = chrono::Utc::now().to_rfc3339();
+        }
+    }
+
+    Ok(assistant_msg_id)
+}
+
+// ============ App Entry ============
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // Enable Bedrock for Claude Agent SDK
+    // The SDK uses Claude Code CLI which checks this env var
+    std::env::set_var("CLAUDE_CODE_USE_BEDROCK", "true");
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .setup(|app| {
+            // Always enable logging for debugging
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Debug)
+                    .build(),
+            )?;
+
+            // Initialize database
+            let app_data_dir = app.path().app_data_dir()
+                .expect("Failed to get app data directory");
+            std::fs::create_dir_all(&app_data_dir)
+                .expect("Failed to create app data directory");
+
+            let db_path = app_data_dir.join("chat_history.db");
+            log::info!("Initializing database at: {:?}", db_path);
+
+            let db = ChatDatabase::open(&db_path)
+                .expect("Failed to open database");
+
+            app.manage(AppState::new(db));
+
+            log::info!("Tauri app started with CLAUDE_CODE_USE_BEDROCK={}",
+                std::env::var("CLAUDE_CODE_USE_BEDROCK").unwrap_or_default());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            // File commands
+            read_file,
+            save_file,
+            get_home_dir,
+            get_data_dir,
+            get_config_dir,
+            file_exists,
+            list_dir,
+            create_dir,
+            remove_file,
+            remove_dir,
+            // Session commands (legacy in-memory)
+            get_sessions,
+            create_session,
+            delete_session,
+            get_session_messages,
+            // Workspace commands
+            set_workspace,
+            get_workspace,
+            // Database commands (SQLite)
+            db_create_session,
+            db_get_sessions,
+            db_get_session,
+            db_update_session,
+            db_delete_session,
+            db_append_message,
+            db_get_messages,
+            db_get_recent_messages,
+            db_update_message_metadata,
+            db_get_session_with_messages,
+            db_update_session_flag,
+            db_update_session_status,
+            db_update_session_unread,
+            db_get_flagged_sessions,
+            db_get_sessions_by_status,
+            // Claude commands
+            send_message,
+            // Simple chat commands
+            chat_send,
+            // MCP commands
+            mcp_list_servers,
+            mcp_add_server,
+            mcp_remove_server,
+            mcp_toggle_server,
+            mcp_update_server,
+            mcp_get_server,
+            // Skills commands
+            skill_list,
+            skill_get_content,
+            skill_get_metadata,
+            skill_list_files,
+            skill_read_file,
+            skill_install_from_content,
+            skill_install_from_url,
+            skill_install_from_zip,
+            skill_delete,
+            skill_open_folder,
+            skill_search,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}

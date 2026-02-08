@@ -1,0 +1,8 @@
+{
+  "name": "Agent Cowork Studio",
+  "description": "A sophisticated multi-agent collaborative workspace featuring architectural analysis, step-by-step reasoning, and deep Gemini integration.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
