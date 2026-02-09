@@ -40,6 +40,34 @@ One window. One workspace. One flow.
 
 ---
 
+## Screenshots
+
+<div align="center">
+
+### Workspace Selection
+<img src="screenshots/workspace.png" width="600" alt="Workspace Selection">
+
+*Select a workspace to enable Memory and file operations*
+
+### Chat & Agent Modes
+<img src="screenshots/chat_agent.png" width="800" alt="Chat and Agent Modes">
+
+*Seamless switching between Chat and Agent modes*
+
+### Settings
+
+<table>
+<tr>
+<td align="center"><img src="screenshots/settings-ai.png" width="280" alt="AI Settings"><br><em>AI Providers</em></td>
+<td align="center"><img src="screenshots/settings-mcp.png" width="280" alt="MCP Settings"><br><em>MCP Servers</em></td>
+<td align="center"><img src="screenshots/settings-skills.png" width="280" alt="Skills Settings"><br><em>Skills</em></td>
+</tr>
+</table>
+
+</div>
+
+---
+
 ## Quick Start
 
 ```bash
