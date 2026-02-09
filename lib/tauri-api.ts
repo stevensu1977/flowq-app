@@ -675,6 +675,8 @@ export interface SimpleChatRequest {
   systemPrompt?: string
   maxTokens?: number
   temperature?: number
+  /** Workspace path for memory context injection */
+  workspace?: string
 }
 
 export interface ChatApiResponse {

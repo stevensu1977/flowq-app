@@ -18,6 +18,8 @@ import {
   CircleCheck,
   CircleX,
   Square,
+  FolderOpen,
+  Brain,
 } from 'lucide-react';
 import { ChatSession, ChatMessage, Step, SessionStatus, SESSION_STATUS_CONFIG, ToolOutput, SessionTokenUsage, TokenUsage, ChatMode } from '../types';
 import AgentSteps from './AgentSteps';
@@ -93,6 +95,7 @@ interface ChatWindowProps {
   apiSettings: ApiSettings;
   onSaveApiSettings: (settings: ApiSettings) => void;
   onOpenSettings?: (tab?: SettingsTab) => void;
+  onSelectWorkspace?: () => void;
 }
 
 // Format timestamp for display
@@ -152,7 +155,7 @@ const StatusIcon: React.FC<{ status: SessionStatus; size?: number }> = ({ status
   );
 };
 
-const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUpdateSession, apiSettings, onSaveApiSettings, onOpenSettings }) => {
+const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUpdateSession, apiSettings, onSaveApiSettings, onOpenSettings, onSelectWorkspace }) => {
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -941,6 +944,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
         region: !isAnthropic ? apiSettings.bedrockRegion : undefined,
         awsProfile: !isAnthropic && apiSettings.bedrockAuthMethod === 'profile' ? apiSettings.bedrockProfile : undefined,
         maxTokens: 4096,
+        workspace: session.workspacePath,  // Enable memory context injection
       });
 
       // Update chat history with response
@@ -1008,9 +1012,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 md:bg-[#f9fafb] md:dark:bg-gray-900">
       {/* Header */}
       <div className="h-16 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 flex items-center justify-between flex-shrink-0 z-10">
-        <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors">
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{session.title}</span>
-          <ChevronDown size={14} className="text-gray-400" />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors">
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{session.title}</span>
+            <ChevronDown size={14} className="text-gray-400" />
+          </div>
+          {/* Memory indicator */}
+          {session.workspacePath ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-md text-xs font-medium">
+              <Brain size={12} />
+              <span>Memory</span>
+            </div>
+          ) : chatMode === 'chat' && onSelectWorkspace ? (
+            <button
+              onClick={onSelectWorkspace}
+              className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-md text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+            >
+              <FolderOpen size={12} />
+              <span>选择目录</span>
+            </button>
+          ) : null}
         </div>
         {/* Header actions moved to input area */}
         <div className="flex items-center gap-4">
@@ -1035,11 +1056,19 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
         }}
       >
         {displayMessages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center opacity-50">
-             <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-               <Database size={24} className="text-gray-400 dark:text-gray-500" />
-             </div>
-             <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Ready to collaborate. Ask me anything!</p>
+          <div className="h-full flex flex-col items-center justify-center text-center">
+            <div className="opacity-50">
+              <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
+                <Database size={24} className="text-gray-400 dark:text-gray-500" />
+              </div>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Ready to collaborate. Ask me anything!</p>
+              {session.workspacePath && (
+                <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center justify-center gap-1">
+                  <Brain size={12} />
+                  Memory enabled
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -1293,6 +1322,58 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
         onCancel={handleInterrupt}
         onDismiss={() => setShowInterruptOverlay(false)}
       />
+
+      {/* Workspace Selection Modal */}
+      {!session.workspacePath && onSelectWorkspace && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
+          {/* Modal Content */}
+          <div className="relative z-10 w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+            {/* Header */}
+            <div className="px-6 pt-8 pb-6 text-center border-b border-gray-100 dark:border-gray-700">
+              <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center mx-auto mb-4">
+                <FolderOpen size={28} className="text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Select a Workspace</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {chatMode === 'agent'
+                  ? 'Choose a directory where the Agent will execute file operations and code modifications.'
+                  : 'Choose a directory to enable Memory. The AI will remember important information you share.'}
+              </p>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Brain size={16} className="text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Persistent Memory</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      AI can save and recall information across sessions
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={onSelectWorkspace}
+                className="w-full mt-6 py-3 bg-gray-900 dark:bg-indigo-600 hover:bg-gray-800 dark:hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors active:scale-[0.98]"
+              >
+                Choose Directory
+              </button>
+
+              <p className="text-xs text-center text-gray-400 dark:text-gray-500 mt-4">
+                You can change the workspace anytime from the sidebar
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -12,12 +12,16 @@ use uuid::Uuid;
 mod chat;
 mod db;
 mod mcp;
+mod memory_index;
+mod memory_tool;
 mod skill;
 
 use chat::{ApiConfig, ChatClient, ChatMessage as SimpleChatMessage, ChatRequest, ChatResponse};
 use db::{ChatDatabase, DbSession, DbMessage};
 use mcp::{McpManager, McpServerInfo, AddMcpServerRequest};
 use skill::{SkillManager, SkillInfo, SkillMetadata, FileItem, SearchSkill};
+use memory_index::{MemoryIndex, SearchResult as MemorySearchResult, SyncResult as MemorySyncResult, MemoryStats};
+use memory_tool::{MemoryTool, MemoryToolCommand, MemoryToolResult};
 
 // ============ Types ============
 
@@ -463,6 +467,162 @@ async fn skill_search(query: String) -> Result<Vec<SearchSkill>, String> {
     SkillManager::search(&query).await.map_err(|e| e.to_string())
 }
 
+// ============ Memory Commands ============
+
+#[tauri::command]
+async fn memory_sync(workspace: String) -> Result<MemorySyncResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let index = MemoryIndex::open(&workspace_path)
+        .map_err(|e| format!("Failed to open memory index: {}", e))?;
+
+    index.sync()
+        .map_err(|e| format!("Failed to sync memory: {}", e))
+}
+
+#[tauri::command]
+async fn memory_search(
+    workspace: String,
+    query: String,
+    max_results: Option<usize>,
+) -> Result<Vec<MemorySearchResult>, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let index = MemoryIndex::open(&workspace_path)
+        .map_err(|e| format!("Failed to open memory index: {}", e))?;
+
+    let limit = max_results.unwrap_or(10);
+    index.search(&query, limit)
+        .map_err(|e| format!("Failed to search memory: {}", e))
+}
+
+#[tauri::command]
+async fn memory_get_context(workspace: String) -> Result<String, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let index = MemoryIndex::open(&workspace_path)
+        .map_err(|e| format!("Failed to open memory index: {}", e))?;
+
+    index.get_context()
+        .map_err(|e| format!("Failed to get memory context: {}", e))
+}
+
+#[tauri::command]
+async fn memory_get_stats(workspace: String) -> Result<MemoryStats, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let index = MemoryIndex::open(&workspace_path)
+        .map_err(|e| format!("Failed to open memory index: {}", e))?;
+
+    index.get_stats()
+        .map_err(|e| format!("Failed to get memory stats: {}", e))
+}
+
+// ============ Memory Tool Commands ============
+
+#[tauri::command]
+async fn memory_tool_view(
+    workspace: String,
+    path: String,
+    view_range: Option<(u32, u32)>,
+) -> Result<MemoryToolResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let tool = MemoryTool::new(&workspace_path);
+    Ok(tool.execute(MemoryToolCommand::View { path, view_range }))
+}
+
+#[tauri::command]
+async fn memory_tool_create(
+    workspace: String,
+    path: String,
+    file_text: String,
+) -> Result<MemoryToolResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let tool = MemoryTool::new(&workspace_path);
+    Ok(tool.execute(MemoryToolCommand::Create { path, file_text }))
+}
+
+#[tauri::command]
+async fn memory_tool_str_replace(
+    workspace: String,
+    path: String,
+    old_str: String,
+    new_str: String,
+) -> Result<MemoryToolResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let tool = MemoryTool::new(&workspace_path);
+    Ok(tool.execute(MemoryToolCommand::StrReplace { path, old_str, new_str }))
+}
+
+#[tauri::command]
+async fn memory_tool_insert(
+    workspace: String,
+    path: String,
+    insert_line: u32,
+    new_str: String,
+) -> Result<MemoryToolResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let tool = MemoryTool::new(&workspace_path);
+    Ok(tool.execute(MemoryToolCommand::Insert { path, insert_line, new_str }))
+}
+
+#[tauri::command]
+async fn memory_tool_delete(
+    workspace: String,
+    path: String,
+) -> Result<MemoryToolResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let tool = MemoryTool::new(&workspace_path);
+    Ok(tool.execute(MemoryToolCommand::Delete { path }))
+}
+
+#[tauri::command]
+async fn memory_tool_rename(
+    workspace: String,
+    old_path: String,
+    new_path: String,
+) -> Result<MemoryToolResult, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let tool = MemoryTool::new(&workspace_path);
+    Ok(tool.execute(MemoryToolCommand::Rename { old_path, new_path }))
+}
+
 // ============ API Settings ============
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -495,11 +655,72 @@ pub struct SimpleChatRequest {
     pub system_prompt: Option<String>,
     pub max_tokens: Option<u32>,
     pub temperature: Option<f32>,
+    /// Workspace path for memory context injection
+    pub workspace: Option<String>,
 }
 
 #[tauri::command]
 async fn chat_send(request: SimpleChatRequest) -> Result<ChatResponse, String> {
     log::info!("chat_send called with provider: {}", request.provider);
+
+    // Build system prompt with memory context if workspace is provided
+    let system_prompt = if let Some(ref workspace) = request.workspace {
+        let workspace_path = PathBuf::from(workspace);
+        if workspace_path.exists() {
+            // Try to get memory context
+            let memory_context = MemoryIndex::open(&workspace_path)
+                .ok()
+                .and_then(|index| index.get_context().ok())
+                .unwrap_or_default();
+
+            // Memory tool instructions - STRONG directive to actually use the tool
+            let memory_instructions = r#"# Memory System - IMPORTANT
+
+You have access to a `memory` tool for persistent storage. **YOU MUST ACTUALLY CALL THE TOOL** - do NOT just say "I'll remember that" without using the tool!
+
+## CRITICAL: When user says "记住"/"remember"/"save this" → CALL THE TOOL!
+
+If the user asks you to remember something, you MUST:
+1. Actually call the `memory` tool with `create` or `str_replace` command
+2. Only AFTER the tool succeeds, confirm the memory was saved
+
+DO NOT just respond "I've remembered that" without calling the tool - the information will be lost!
+
+## Tool Commands
+- `view`: Read files (path: "" for root, "filename.md" for specific file)
+- `create`: Create new file (path: "notes.md", file_text: "content here")
+- `str_replace`: Update text (path, old_str, new_str)
+- `insert`: Insert at line (path, insert_line, new_str)
+- `delete`: Delete file (path)
+
+## When to Save (CALL THE TOOL):
+- User shares dates, tickets, appointments → SAVE IT
+- User says "记住/remember/记一下" → SAVE IT
+- Important personal info → SAVE IT
+
+## File Organization
+Save to descriptive files: "tickets.md", "appointments.md", "notes.md", "user_info.md"
+
+"#;
+            // Combine memory context with instructions and user's system prompt
+            let base_prompt = request.system_prompt.unwrap_or_default();
+            let memory_context_section = if !memory_context.is_empty() {
+                format!("## Current Memory\n\n{}\n\n---\n\n", memory_context.trim())
+            } else {
+                String::new()
+            };
+
+            if base_prompt.is_empty() {
+                Some(format!("{}{}", memory_instructions, memory_context_section))
+            } else {
+                Some(format!("{}{}{}", memory_instructions, memory_context_section, base_prompt))
+            }
+        } else {
+            request.system_prompt
+        }
+    } else {
+        request.system_prompt
+    };
 
     let client = ChatClient::new();
     let chat_request = ChatRequest {
@@ -512,9 +733,10 @@ async fn chat_send(request: SimpleChatRequest) -> Result<ChatResponse, String> {
             region: request.region,
             aws_profile: request.aws_profile,
         },
-        system_prompt: request.system_prompt,
+        system_prompt,
         max_tokens: request.max_tokens,
         temperature: request.temperature,
+        workspace: request.workspace,
     };
 
     client.send(chat_request).await
@@ -589,7 +811,37 @@ async fn send_message(
         options_builder = options_builder.cwd(ws_path.as_str());
     }
 
-    if let Some(prompt) = system_prompt {
+    // Build system prompt with memory context
+    let enhanced_system_prompt = if let Some(ref ws_path) = workspace_path {
+        let workspace_dir = PathBuf::from(ws_path);
+        // Try to get memory context
+        let memory_context = MemoryIndex::open(&workspace_dir)
+            .ok()
+            .and_then(|index| index.get_context().ok())
+            .unwrap_or_default();
+
+        if !memory_context.is_empty() {
+            let base_prompt = system_prompt.unwrap_or_default();
+            if base_prompt.is_empty() {
+                Some(format!(
+                    "# Memory Context\n\nThe following information has been stored in your memory. Use it to provide personalized and contextual responses.\n\n{}\n\n---\n",
+                    memory_context.trim()
+                ))
+            } else {
+                Some(format!(
+                    "# Memory Context\n\nThe following information has been stored in your memory. Use it to provide personalized and contextual responses.\n\n{}\n\n---\n\n{}",
+                    memory_context.trim(),
+                    base_prompt
+                ))
+            }
+        } else {
+            system_prompt
+        }
+    } else {
+        system_prompt
+    };
+
+    if let Some(prompt) = enhanced_system_prompt {
         options_builder = options_builder.system_prompt(prompt.as_str());
     }
 
@@ -882,6 +1134,18 @@ pub fn run() {
             skill_delete,
             skill_open_folder,
             skill_search,
+            // Memory commands
+            memory_sync,
+            memory_search,
+            memory_get_context,
+            memory_get_stats,
+            // Memory tool commands
+            memory_tool_view,
+            memory_tool_create,
+            memory_tool_str_replace,
+            memory_tool_insert,
+            memory_tool_delete,
+            memory_tool_rename,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
