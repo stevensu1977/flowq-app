@@ -673,39 +673,31 @@ async fn chat_send(request: SimpleChatRequest) -> Result<ChatResponse, String> {
                 .and_then(|index| index.get_context().ok())
                 .unwrap_or_default();
 
-            // Memory tool instructions - STRONG directive to actually use the tool
-            let memory_instructions = r#"# Memory System - IMPORTANT
+            // Memory tool instructions - passive approach, only use when needed
+            let memory_instructions = r#"# Memory System
 
-You have access to a `memory` tool for persistent storage. **YOU MUST ACTUALLY CALL THE TOOL** - do NOT just say "I'll remember that" without using the tool!
+You have a `memory` tool for persistent storage. Use it ONLY when the user explicitly asks you to remember/save something.
 
-## CRITICAL: When user says "记住"/"remember"/"save this" → CALL THE TOOL!
+## Guidelines
+- **DO NOT** proactively mention or reference your stored memories unless directly relevant to user's question
+- **DO NOT** mention the memory system exists unless user asks about it
+- **ONLY** use the memory tool when user explicitly asks: "记住"/"remember"/"save this"/"记一下"
 
-If the user asks you to remember something, you MUST:
-1. Actually call the `memory` tool with `create` or `str_replace` command
-2. Only AFTER the tool succeeds, confirm the memory was saved
-
-DO NOT just respond "I've remembered that" without calling the tool - the information will be lost!
-
-## Tool Commands
-- `view`: Read files (path: "" for root, "filename.md" for specific file)
-- `create`: Create new file (path: "notes.md", file_text: "content here")
+## Tool Commands (use only when needed)
+- `view`: Read files
+- `create`: Create new file (path: "filename.md", file_text: "content")
 - `str_replace`: Update text (path, old_str, new_str)
 - `insert`: Insert at line (path, insert_line, new_str)
-- `delete`: Delete file (path)
+- `delete`: Delete file
 
-## When to Save (CALL THE TOOL):
-- User shares dates, tickets, appointments → SAVE IT
-- User says "记住/remember/记一下" → SAVE IT
-- Important personal info → SAVE IT
-
-## File Organization
-Save to descriptive files: "tickets.md", "appointments.md", "notes.md", "user_info.md"
-
+## Important
+- When asked "who are you" or general questions, respond normally without mentioning memory
+- Only reference stored information if user's question specifically relates to it
 "#;
             // Combine memory context with instructions and user's system prompt
             let base_prompt = request.system_prompt.unwrap_or_default();
             let memory_context_section = if !memory_context.is_empty() {
-                format!("## Current Memory\n\n{}\n\n---\n\n", memory_context.trim())
+                format!("## Stored Information (DO NOT mention unless user asks about this specific topic)\n\n{}\n\n---\n\n", memory_context.trim())
             } else {
                 String::new()
             };
@@ -822,14 +814,18 @@ async fn send_message(
 
         if !memory_context.is_empty() {
             let base_prompt = system_prompt.unwrap_or_default();
+            // Memory context instruction: only reference when relevant, don't proactively mention
+            let memory_header = "# Background Information (Reference ONLY when relevant to user's question - DO NOT proactively mention)\n\n";
             if base_prompt.is_empty() {
                 Some(format!(
-                    "# Memory Context\n\nThe following information has been stored in your memory. Use it to provide personalized and contextual responses.\n\n{}\n\n---\n",
+                    "{}{}\n\n---\n",
+                    memory_header,
                     memory_context.trim()
                 ))
             } else {
                 Some(format!(
-                    "# Memory Context\n\nThe following information has been stored in your memory. Use it to provide personalized and contextual responses.\n\n{}\n\n---\n\n{}",
+                    "{}{}\n\n---\n\n{}",
+                    memory_header,
                     memory_context.trim(),
                     base_prompt
                 ))
