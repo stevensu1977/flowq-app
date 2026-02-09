@@ -288,6 +288,110 @@
             animation: memoryPulse 2s ease-in-out infinite;
         }
 
+        /* Paper grain texture for surfaces */
+        .paper-texture {
+            position: relative;
+        }
+        .paper-texture::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 200px;
+            opacity: 0.025;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .dark .paper-texture::before {
+            opacity: 0.04;
+        }
+
+        /* Sidebar stagger animation */
+        @keyframes sidebarFadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .sidebar-animate {
+            animation: sidebarFadeIn 0.35s ease-out backwards;
+        }
+
+        .sidebar-animate:nth-child(1) { animation-delay: 0.02s; }
+        .sidebar-animate:nth-child(2) { animation-delay: 0.04s; }
+        .sidebar-animate:nth-child(3) { animation-delay: 0.06s; }
+        .sidebar-animate:nth-child(4) { animation-delay: 0.08s; }
+        .sidebar-animate:nth-child(5) { animation-delay: 0.10s; }
+        .sidebar-animate:nth-child(6) { animation-delay: 0.12s; }
+        .sidebar-animate:nth-child(7) { animation-delay: 0.14s; }
+        .sidebar-animate:nth-child(8) { animation-delay: 0.16s; }
+        .sidebar-animate:nth-child(9) { animation-delay: 0.18s; }
+        .sidebar-animate:nth-child(10) { animation-delay: 0.20s; }
+
+        /* Settings slide-over panel */
+        @keyframes slideInFromRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0.8;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutToRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+        }
+
+        .slide-in-right {
+            animation: slideInFromRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .slide-out-right {
+            animation: slideOutToRight 0.25s ease-in forwards;
+        }
+
+        /* Backdrop blur for slide-over */
+        .backdrop-blur-overlay {
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        /* Dark mode refinements */
+        .dark {
+            /* Subtle glow effect for cards in dark mode */
+            --card-glow: 0 0 40px rgba(91, 166, 125, 0.03);
+        }
+
+        .dark .card-glow {
+            box-shadow: var(--card-glow);
+        }
+
+        /* Dark mode border refinements - more visible */
+        .dark .border-refined {
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        /* Dark mode input focus glow */
+        .dark input:focus,
+        .dark textarea:focus {
+            box-shadow: 0 0 0 2px rgba(91, 166, 125, 0.2);
+        }
+
         /* Respect reduced motion preferences */
         @media (prefers-reduced-motion: reduce) {
             *,

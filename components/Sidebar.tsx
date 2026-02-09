@@ -181,31 +181,35 @@ const Sidebar: React.FC<SidebarProps> = ({
   const initials = currentWorkspace ? getInitials(currentWorkspace.name) : 'NW';
 
   return (
-    <div className="flex flex-col h-full p-4 gap-6">
+    <div className="flex flex-col h-full p-4 gap-6 paper-texture">
       <button
         onClick={onNewChat}
-        className="w-full flex items-center gap-2 px-3 py-2.5 bg-card border border-border rounded-lg text-foreground text-sm font-medium hover:bg-muted transition-all shadow-sm active:scale-95"
+        className="sidebar-animate w-full flex items-center gap-2 px-3 py-2.5 bg-card border border-border rounded-lg text-foreground text-sm font-medium hover:bg-muted transition-all shadow-sm active:scale-95 relative z-10"
       >
         <Plus size={18} />
         New Chat
       </button>
 
-      <div className="space-y-1">
-        <NavItem
-          icon={MessageSquare}
-          label="All Chats"
-          active={filter === 'all'}
-          onClick={() => onFilterChange?.('all')}
-        />
-        <NavItem
-          icon={Flag}
-          label="Flagged"
-          active={filter === 'flagged'}
-          onClick={() => onFilterChange?.('flagged')}
-        />
+      <div className="space-y-1 relative z-10">
+        <div className="sidebar-animate">
+          <NavItem
+            icon={MessageSquare}
+            label="All Chats"
+            active={filter === 'all'}
+            onClick={() => onFilterChange?.('all')}
+          />
+        </div>
+        <div className="sidebar-animate">
+          <NavItem
+            icon={Flag}
+            label="Flagged"
+            active={filter === 'flagged'}
+            onClick={() => onFilterChange?.('flagged')}
+          />
+        </div>
 
         {/* Status - Expandable */}
-        <div>
+        <div className="sidebar-animate">
           <button
             type="button"
             onClick={() => setIsStatusExpanded(!isStatusExpanded)}
@@ -247,7 +251,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Labels - Expandable */}
-        <div>
+        <div className="sidebar-animate">
           <button
             type="button"
             onClick={() => setIsLabelsExpanded(!isLabelsExpanded)}
@@ -292,22 +296,32 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      <div className="space-y-1">
-        <h3 className="px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Sources</h3>
-        <NavItem icon={Database} label="APIs" onClick={() => onOpenSettings?.('apis')} />
-        <NavItem icon={Cpu} label="MCPs" onClick={() => onOpenSettings?.('mcp')} />
-        <NavItem icon={FolderOpen} label="Local Folders" />
+      <div className="space-y-1 relative z-10">
+        <h3 className="sidebar-animate px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Sources</h3>
+        <div className="sidebar-animate">
+          <NavItem icon={Database} label="APIs" onClick={() => onOpenSettings?.('apis')} />
+        </div>
+        <div className="sidebar-animate">
+          <NavItem icon={Cpu} label="MCPs" onClick={() => onOpenSettings?.('mcp')} />
+        </div>
+        <div className="sidebar-animate">
+          <NavItem icon={FolderOpen} label="Local Folders" />
+        </div>
       </div>
 
-      <div className="space-y-1">
-        <NavItem icon={Zap} label="Skills" onClick={() => onOpenSettings?.('skills')} />
-        <NavItem icon={Settings} label="Settings" onClick={() => onOpenSettings?.()} />
+      <div className="space-y-1 relative z-10">
+        <div className="sidebar-animate">
+          <NavItem icon={Zap} label="Skills" onClick={() => onOpenSettings?.('skills')} />
+        </div>
+        <div className="sidebar-animate">
+          <NavItem icon={Settings} label="Settings" onClick={() => onOpenSettings?.()} />
+        </div>
 
         {/* Theme Toggle */}
         <button
           type="button"
           onClick={toggleTheme}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="sidebar-animate w-full flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           {resolvedTheme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
           <span className="text-sm font-medium flex-1 text-left">

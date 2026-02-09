@@ -161,28 +161,28 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop with blur */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/30 backdrop-blur-overlay transition-opacity"
         onClick={onClose}
       />
 
-      {/* Modal */}
-      <div className="relative w-full max-w-3xl h-[600px] bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 flex overflow-hidden">
+      {/* Slide-over Panel */}
+      <div className="relative w-full max-w-2xl h-full bg-card shadow-2xl border-l border-border flex overflow-hidden slide-in-right">
         {/* Sidebar */}
-        <div className="w-56 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 p-4">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-              <Settings className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+        <div className="w-52 border-r border-border bg-muted/50 p-4 paper-texture">
+          <div className="flex items-center gap-3 mb-6 relative z-10">
+            <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
+              <Settings className="w-5 h-5 text-accent" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Settings</h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Configure your preferences</p>
+              <h2 className="text-lg font-semibold text-foreground">Settings</h2>
+              <p className="text-xs text-muted-foreground">Configure preferences</p>
             </div>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1 relative z-10">
             {TABS.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -191,8 +191,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                   onClick={() => setActiveTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     activeTab === tab.id
-                      ? 'bg-white dark:bg-gray-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                      ? 'bg-card text-accent shadow-sm border border-border/50'
+                      : 'text-muted-foreground hover:bg-card/50 hover:text-foreground'
                   }`}
                 >
                   <Icon size={18} />
@@ -204,15 +204,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col bg-background">
           {/* Header */}
-          <div className="h-14 border-b border-gray-200 dark:border-gray-700 px-6 flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+          <div className="h-14 border-b border-border px-6 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-foreground">
               {TABS.find((t) => t.id === activeTab)?.label}
             </h3>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
             >
               <X size={18} />
             </button>
@@ -225,8 +225,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
               <div className="space-y-6">
                 {/* Default Model */}
                 <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <Cpu size={16} className="text-gray-500" />
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Cpu size={16} className="text-muted-foreground" />
                     Default Model
                   </label>
                   <div className="space-y-2">
@@ -236,20 +236,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                         onClick={() => updateSettings({ defaultModel: model.id })}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
                           settings.defaultModel === model.id
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                            ? 'border-accent bg-accent/10'
+                            : 'border-border hover:bg-muted'
                         }`}
                       >
                         <div className="flex-1 text-left">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          <div className="text-sm font-medium text-foreground">
                             {model.name}
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                          <div className="text-xs text-muted-foreground">
                             {model.description}
                           </div>
                         </div>
                         {settings.defaultModel === model.id && (
-                          <Check size={16} className="text-indigo-500" />
+                          <Check size={16} className="text-accent" />
                         )}
                       </button>
                     ))}
@@ -258,7 +258,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
 
                 {/* Toggles */}
                 <div className="space-y-3">
-                  <label className="text-sm font-medium text-gray-900 dark:text-white">
+                  <label className="text-sm font-medium text-foreground">
                     Preferences
                   </label>
                   <div className="space-y-2">
@@ -529,12 +529,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                 )}
 
                 {/* Save Button */}
-                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <div className="pt-4 border-t border-border">
                   <button
                     onClick={() => {
                       onSaveApiSettings?.(localApiSettings);
                     }}
-                    className="w-full px-4 py-2.5 bg-indigo-600 text-white font-medium rounded-xl hover:bg-indigo-700 transition-colors"
+                    className="w-full px-4 py-2.5 bg-accent text-accent-foreground font-medium rounded-xl hover:opacity-90 transition-colors"
                   >
                     Save API Settings
                   </button>
@@ -552,8 +552,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
             {activeTab === 'permissions' && (
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <Shield size={16} className="text-gray-500" />
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Shield size={16} className="text-muted-foreground" />
                     Default Permission Mode
                   </label>
                   <div className="space-y-2">
@@ -563,20 +563,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                         onClick={() => updateSettings({ permissionMode: option.id })}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
                           settings.permissionMode === option.id
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                            ? 'border-accent bg-accent/10'
+                            : 'border-border hover:bg-muted'
                         }`}
                       >
                         <div className="flex-1 text-left">
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
+                          <div className="text-sm font-medium text-foreground">
                             {option.label}
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                          <div className="text-xs text-muted-foreground">
                             {option.description}
                           </div>
                         </div>
                         {settings.permissionMode === option.id && (
-                          <Check size={16} className="text-indigo-500" />
+                          <Check size={16} className="text-accent" />
                         )}
                       </button>
                     ))}
@@ -584,8 +584,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                 </div>
 
                 {settings.permissionMode === 'allow-all' && (
-                  <div className="px-4 py-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-200 dark:border-red-800">
-                    <p className="text-sm text-red-600 dark:text-red-400">
+                  <div className="px-4 py-3 bg-danger/10 rounded-xl border border-danger/30">
+                    <p className="text-sm text-danger">
                       <strong>Warning:</strong> In "Allow All" mode, all operations will be executed without confirmation. Use with caution.
                     </p>
                   </div>
@@ -597,8 +597,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
             {activeTab === 'appearance' && (
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
-                    <Palette size={16} className="text-gray-500" />
+                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <Palette size={16} className="text-muted-foreground" />
                     Theme
                   </label>
                   <div className="grid grid-cols-3 gap-3">
@@ -610,19 +610,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                           onClick={() => setTheme(option.id)}
                           className={`flex flex-col items-center gap-2 px-4 py-4 rounded-xl border transition-colors ${
                             theme === option.id
-                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                              ? 'border-accent bg-accent/10'
+                              : 'border-border hover:bg-muted'
                           }`}
                         >
                           <Icon
                             size={24}
-                            className={theme === option.id ? 'text-indigo-500' : 'text-gray-500'}
+                            className={theme === option.id ? 'text-accent' : 'text-muted-foreground'}
                           />
                           <span
                             className={`text-sm font-medium ${
                               theme === option.id
-                                ? 'text-indigo-600 dark:text-indigo-400'
-                                : 'text-gray-700 dark:text-gray-300'
+                                ? 'text-accent'
+                                : 'text-foreground'
                             }`}
                           >
                             {option.label}
@@ -638,19 +638,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
             {/* Shortcuts */}
             {activeTab === 'shortcuts' && (
               <div className="space-y-4">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   Keyboard shortcuts to help you work faster
                 </p>
                 <div className="space-y-2">
                   {SHORTCUTS.map((shortcut, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl"
+                      className="flex items-center justify-between px-4 py-3 bg-muted rounded-xl"
                     >
-                      <span className="text-sm text-gray-700 dark:text-gray-300">
+                      <span className="text-sm text-foreground">
                         {shortcut.description}
                       </span>
-                      <kbd className="px-2 py-1 text-xs font-mono bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded shadow-sm">
+                      <kbd className="px-2 py-1 text-xs font-mono bg-card border border-border rounded shadow-sm text-foreground">
                         {shortcut.key}
                       </kbd>
                     </div>
@@ -676,19 +676,19 @@ interface ToggleItemProps {
 const ToggleItem: React.FC<ToggleItemProps> = ({ label, description, checked, onChange }) => (
   <div
     onClick={() => onChange(!checked)}
-    className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+    className="flex items-center justify-between px-4 py-3 rounded-xl border border-border cursor-pointer hover:bg-muted transition-colors"
   >
     <div>
-      <div className="text-sm font-medium text-gray-900 dark:text-white">{label}</div>
-      <div className="text-xs text-gray-500 dark:text-gray-400">{description}</div>
+      <div className="text-sm font-medium text-foreground">{label}</div>
+      <div className="text-xs text-muted-foreground">{description}</div>
     </div>
     <div
       className={`w-10 h-6 rounded-full transition-colors ${
-        checked ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'
+        checked ? 'bg-accent' : 'bg-border'
       }`}
     >
       <div
-        className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${
+        className={`w-5 h-5 bg-white dark:bg-card rounded-full shadow-sm transform transition-transform ${
           checked ? 'translate-x-4' : 'translate-x-0.5'
         } mt-0.5`}
       />

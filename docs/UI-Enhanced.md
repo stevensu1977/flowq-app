@@ -601,11 +601,11 @@ All aesthetic changes must maintain accessibility:
 3. ✅ Add message animations (messageIn animation, streaming cursor)
 4. ✅ Refine empty states (friendly illustration, suggested prompts grid)
 
-### Phase 3: Polish
-1. Add paper grain texture
-2. Implement sidebar stagger animations
-3. Dark mode refinements
-4. Settings panel slide-over
+### Phase 3: Polish ✅ COMPLETED
+1. ✅ Add paper grain texture (SVG noise texture on sidebar and surfaces)
+2. ✅ Implement sidebar stagger animations (sidebarFadeIn with staggered delays)
+3. ✅ Dark mode refinements (card glow, border refinements, input focus glow)
+4. ✅ Settings panel slide-over (slide-in-right animation with backdrop blur)
 
 ### Phase 4: Delight
 1. Custom illustrations for empty states
