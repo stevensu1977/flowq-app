@@ -138,34 +138,35 @@ const extractTextContent = (children: ReactNode): string => {
 
 const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-      components={{
-        // 标题样式
-        h1: ({ children }) => (
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-2 first:mt-0">{children}</h1>
-        ),
-        h2: ({ children }) => (
-          <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2 first:mt-0">{children}</h2>
-        ),
-        h3: ({ children }) => (
-          <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{children}</h3>
-        ),
-        // 段落
-        p: ({ children }) => (
-          <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-3 last:mb-0">{children}</p>
-        ),
-        // 列表
-        ul: ({ children }) => (
-          <ul className="list-disc list-inside text-sm text-gray-700 dark:text-gray-300 mb-3 space-y-1">{children}</ul>
-        ),
-        ol: ({ children }) => (
-          <ol className="list-decimal list-inside text-sm text-gray-700 dark:text-gray-300 mb-3 space-y-1">{children}</ol>
-        ),
-        li: ({ children }) => (
-          <li className="text-sm text-gray-700 dark:text-gray-300">{children}</li>
-        ),
+    <div className="prose">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          // 标题样式 - using display font (Lora)
+          h1: ({ children }) => (
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-4 mb-2 first:mt-0">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2 first:mt-0">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-base font-semibold text-gray-800 dark:text-gray-200 mt-3 mb-1">{children}</h3>
+          ),
+          // 段落 - Medium style with better line-height
+          p: ({ children }) => (
+            <p className="text-base text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>
+          ),
+          // 列表
+          ul: ({ children }) => (
+            <ul className="list-disc list-inside text-base text-gray-700 dark:text-gray-300 mb-4 space-y-1.5">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal list-inside text-base text-gray-700 dark:text-gray-300 mb-4 space-y-1.5">{children}</ol>
+          ),
+          li: ({ children }) => (
+            <li className="text-base text-gray-700 dark:text-gray-300">{children}</li>
+          ),
         // 代码块 - 支持 mermaid
         code: ({ className, children, ...props }) => {
           const match = /language-(\w+)/.exec(className || '');
@@ -259,9 +260,10 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => {
           <hr className="border-gray-200 dark:border-gray-700 my-4" />
         ),
       }}
-    >
-      {content}
-    </ReactMarkdown>
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 };
 

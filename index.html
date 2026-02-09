@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FlowQ</title>
-    <meta name="theme-color" content="#6366F1">
+    <meta name="theme-color" content="#2D5A4A">
     <meta name="description" content="FlowQ - Information Management with AI">
 
     <!-- Favicons -->
@@ -21,13 +21,13 @@
     <meta property="og:image" content="/og-image.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        // Configure Tailwind for dark mode
+        // Configure Tailwind for dark mode with "Ink & Paper" theme
         tailwind.config = {
             darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        // Custom semantic colors
+                        // Core semantic colors
                         background: 'var(--background)',
                         foreground: 'var(--foreground)',
                         muted: 'var(--muted)',
@@ -35,37 +35,91 @@
                         border: 'var(--border)',
                         accent: 'var(--accent)',
                         'accent-foreground': 'var(--accent-foreground)',
+                        'accent-secondary': 'var(--accent-secondary)',
+                        card: 'var(--card)',
+                        'card-foreground': 'var(--card-foreground)',
+
+                        // Semantic mode colors
+                        'agent-mode': 'var(--agent-mode)',
+                        'chat-mode': 'var(--chat-mode)',
+                        'memory': 'var(--memory-indicator)',
+                        'danger': 'var(--danger)',
+                        'success': 'var(--success)',
+                    },
+                    fontFamily: {
+                        display: ['Lora', 'Georgia', 'serif'],
+                        body: ['Lora', 'Georgia', 'serif'],
+                        ui: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
                     }
                 }
             }
         }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Typography: Medium-style fonts -->
+    <!-- Charter/Lora for body text (Medium uses Charter), Inter for UI, JetBrains Mono for code -->
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* CSS Variables - Light Theme */
+        /* CSS Variables - Light Theme "Morning Paper" */
         :root {
-            --background: #f9fafb;
-            --foreground: #111827;
-            --muted: #f3f4f6;
-            --muted-foreground: #6b7280;
-            --border: #e5e7eb;
-            --accent: #8b5cf6;
-            --accent-foreground: #ffffff;
-            --card: #ffffff;
-            --card-foreground: #111827;
+            /* Surfaces - Warm paper-like tones */
+            --background: #FEFDFB;
+            --foreground: #1A1918;
+            --muted: #F7F5F2;
+            --muted-foreground: #5C5856;
+            --border: #E8E6E3;
+
+            /* Primary accent - Forest green (calm, focused) */
+            --accent: #2D5A4A;
+            --accent-foreground: #FFFFFF;
+
+            /* Secondary accent - Bronze (warmth) */
+            --accent-secondary: #D4A574;
+
+            /* Cards */
+            --card: #FFFFFF;
+            --card-foreground: #1A1918;
+
+            /* Semantic colors */
+            --agent-mode: #2D5A4A;
+            --chat-mode: #5B6B7C;
+            --memory-indicator: #8B7355;
+            --danger: #A65D57;
+            --success: #4A7C59;
+
+            /* Typography - Medium style */
+            --font-display: 'Lora', Georgia, serif;        /* Serif for headings (like Medium) */
+            --font-body: 'Lora', Georgia, serif;           /* Serif for body text (like Charter) */
+            --font-ui: 'Inter', system-ui, sans-serif;     /* Sans-serif for UI elements */
+            --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
         }
 
-        /* CSS Variables - Dark Theme */
+        /* CSS Variables - Dark Theme "Midnight Study" */
         .dark {
-            --background: #111827;
-            --foreground: #f9fafb;
-            --muted: #1f2937;
-            --muted-foreground: #9ca3af;
-            --border: #374151;
-            --accent: #a78bfa;
-            --accent-foreground: #111827;
-            --card: #1f2937;
-            --card-foreground: #f9fafb;
+            /* Surfaces - Deep charcoal with warmth */
+            --background: #141312;
+            --foreground: #E8E6E3;
+            --muted: #1C1B19;
+            --muted-foreground: #A8A5A0;
+            --border: #2A2826;
+
+            /* Primary accent - Softer green for dark mode */
+            --accent: #5BA67D;
+            --accent-foreground: #141312;
+
+            /* Secondary accent - Bronze stays warm */
+            --accent-secondary: #D4A574;
+
+            /* Cards */
+            --card: #1C1B19;
+            --card-foreground: #E8E6E3;
+
+            /* Semantic colors - adjusted for dark */
+            --agent-mode: #5BA67D;
+            --chat-mode: #8B9CAD;
+            --memory-indicator: #C4A77D;
+            --danger: #D4847E;
+            --success: #6BB891;
         }
 
         /* Apply theme background */
@@ -74,11 +128,39 @@
             color: var(--foreground);
         }
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: var(--font-ui);
             margin: 0;
             padding: 0;
             overflow: hidden;
+            line-height: 1.5;
+            letter-spacing: -0.003em;
         }
+
+        /* Serif for content/messages (Medium style) */
+        .prose, .message-content, .chat-content {
+            font-family: var(--font-body);
+            line-height: 1.72;
+            letter-spacing: -0.003em;
+        }
+
+        /* Display font for content headings (inside prose) */
+        .prose h1, .prose h2, .prose h3, .display-font {
+            font-family: var(--font-display);
+            letter-spacing: -0.02em;
+            font-weight: 700;
+        }
+
+        /* Sans-serif for UI elements and UI headings */
+        button, input, select, textarea, .ui-text,
+        h1, h2, h3 {
+            font-family: var(--font-ui);
+        }
+
+        /* Mono font for code */
+        code, pre, .mono-font {
+            font-family: var(--font-mono);
+        }
+
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
@@ -87,19 +169,19 @@
             background: transparent;
         }
         ::-webkit-scrollbar-thumb {
-            background: #e2e8f0;
+            background: var(--border);
             border-radius: 10px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #cbd5e1;
+            background: var(--muted-foreground);
         }
 
         /* Dark mode scrollbar */
         .dark ::-webkit-scrollbar-thumb {
-            background: #4b5563;
+            background: #2A2826;
         }
         .dark ::-webkit-scrollbar-thumb:hover {
-            background: #6b7280;
+            background: #3D3A37;
         }
 
         /* Custom animations */
@@ -131,6 +213,70 @@
 
         .animate-fade-out {
             animation: fade-out 0.2s ease-out;
+        }
+
+        /* Button hover lift effect */
+        .btn-lift,
+        button:not([disabled]),
+        [role="button"] {
+            transition: transform 0.15s ease-out, box-shadow 0.2s ease-out;
+        }
+
+        .btn-lift:hover,
+        button:not([disabled]):hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .btn-lift:active,
+        button:not([disabled]):active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
+        }
+
+        /* Dark mode button shadows */
+        .dark .btn-lift:hover,
+        .dark button:not([disabled]):hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .dark .btn-lift:active,
+        .dark button:not([disabled]):active {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        /* Message appearance animation */
+        @keyframes messageIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px) scale(0.98);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .message-new {
+            animation: messageIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* Stagger animation helper classes */
+        .stagger-1 { animation-delay: 0.05s; }
+        .stagger-2 { animation-delay: 0.1s; }
+        .stagger-3 { animation-delay: 0.15s; }
+        .stagger-4 { animation-delay: 0.2s; }
+        .stagger-5 { animation-delay: 0.25s; }
+
+        /* Respect reduced motion preferences */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
         }
     </style>
 <script type="importmap">
