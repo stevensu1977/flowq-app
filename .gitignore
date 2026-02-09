@@ -28,3 +28,6 @@ src-tauri/target/
 
 # Claude Code settings (local only)
 .claude/settings.local.json
+
+# Internal documentation (not tracked)
+internal_docs/
