@@ -1009,39 +1009,39 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
   const displayMessages = getDisplayMessages();
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 md:bg-[#f9fafb] md:dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="h-16 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-6 flex items-center justify-between flex-shrink-0 z-10">
+      <div className="h-16 border-b border-border bg-card px-6 flex items-center justify-between flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 px-3 py-1.5 rounded-lg transition-colors">
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">{session.title}</span>
-            <ChevronDown size={14} className="text-gray-400" />
+          <div className="flex items-center gap-2 cursor-pointer hover:bg-muted px-3 py-1.5 rounded-lg transition-colors">
+            <span className="text-sm font-semibold text-foreground">{session.title}</span>
+            <ChevronDown size={14} className="text-muted-foreground" />
           </div>
           {/* Memory indicator */}
           {session.workspacePath ? (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 rounded-md text-xs font-medium">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-success/10 text-success rounded-md text-xs font-medium">
               <Brain size={12} />
               <span>Memory</span>
             </div>
           ) : chatMode === 'chat' && onSelectWorkspace ? (
             <button
               onClick={onSelectWorkspace}
-              className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-md text-xs font-medium hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+              className="flex items-center gap-1.5 px-2 py-1 bg-accent-secondary/10 text-accent-secondary rounded-md text-xs font-medium hover:bg-accent-secondary/20 transition-colors"
             >
               <FolderOpen size={12} />
-              <span>选择目录</span>
+              <span>Select Folder</span>
             </button>
           ) : null}
         </div>
-        {/* Header actions moved to input area */}
-        <div className="flex items-center gap-4">
-          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all">
+        {/* Header actions */}
+        <div className="flex items-center gap-2">
+          <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all">
             <Share2 size={18} />
           </button>
-          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all">
+          <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all">
             <Download size={18} />
           </button>
-          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all">
+          <button className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all">
             <MoreVertical size={18} />
           </button>
         </div>
@@ -1049,26 +1049,51 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
 
       {/* Messages Area with edge fade effect */}
       <div
-        className="flex-1 overflow-y-auto px-6 py-6 space-y-8 bg-white dark:bg-gray-900 md:bg-[#f9fafb] md:dark:bg-gray-900"
+        className="flex-1 overflow-y-auto px-6 py-6 space-y-8 bg-background"
         style={{
           maskImage: 'linear-gradient(to bottom, transparent 0px, black 20px, black calc(100% - 20px), transparent 100%)',
           WebkitMaskImage: 'linear-gradient(to bottom, transparent 0px, black 20px, black calc(100% - 20px), transparent 100%)',
         }}
       >
         {displayMessages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center">
-            <div className="opacity-50">
-              <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
-                <Database size={24} className="text-gray-400 dark:text-gray-500" />
+          <div className="h-full flex flex-col items-center justify-center text-center px-4">
+            {/* Friendly illustration */}
+            <div className="mb-6 animate-fade-in">
+              <div className="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center mb-4 mx-auto">
+                <span className="text-3xl">◡</span>
               </div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Ready to collaborate. Ask me anything!</p>
-              {session.workspacePath && (
-                <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center justify-center gap-1">
-                  <Brain size={12} />
-                  Memory enabled
-                </p>
-              )}
+              <h2 className="text-xl font-semibold text-foreground mb-2">Ready when you are</h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Start typing, or try one of these:
+              </p>
             </div>
+
+            {/* Suggested prompts grid */}
+            <div className="grid grid-cols-2 gap-3 max-w-md w-full">
+              {[
+                { text: "Help me write a function...", icon: "✏️" },
+                { text: "Review this code...", icon: "🔍" },
+                { text: "Explain how this works...", icon: "💡" },
+                { text: "Debug this error...", icon: "🐛" },
+              ].map((prompt, i) => (
+                <button
+                  key={i}
+                  onClick={() => setInputValue(prompt.text)}
+                  className={`px-4 py-3 bg-card border border-border rounded-xl text-left text-sm text-muted-foreground hover:text-foreground hover:border-accent/30 hover:bg-accent/5 transition-all animate-fade-in stagger-${i + 1}`}
+                >
+                  <span className="mr-2">{prompt.icon}</span>
+                  {prompt.text}
+                </button>
+              ))}
+            </div>
+
+            {/* Memory status */}
+            {session.workspacePath && (
+              <div className="mt-6 flex items-center gap-1.5 px-3 py-1.5 bg-success/10 text-success rounded-full text-xs font-medium animate-fade-in stagger-5">
+                <Brain size={12} />
+                <span>Memory enabled</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1087,9 +1112,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
           </div>
         )}
 
-        {displayMessages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] ${msg.role === 'user' ? 'bg-gray-100/80 dark:bg-gray-700/80 rounded-2xl px-5 py-3 text-gray-800 dark:text-gray-200 shadow-sm border border-gray-100 dark:border-gray-600' : 'w-full'}`}>
+        {displayMessages.map((msg, index) => (
+          <div key={msg.id} className={`flex message-new ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] ${msg.role === 'user' ? 'bg-muted/80 rounded-2xl px-5 py-3 text-foreground shadow-sm border border-border' : 'w-full'}`}>
               {msg.role === 'agent' && (
                 <div className="space-y-4">
                   {msg.diagram && <ArchitectureDiagram data={msg.diagram} />}
@@ -1099,11 +1124,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
 
                   {/* 然后显示最终响应内容 */}
                   {msg.content && (
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+                    <div className="bg-card rounded-2xl p-6 shadow-sm border border-border overflow-hidden">
                       <MarkdownContent content={msg.content} />
                       {/* Message action bar - Copy and View as Markdown */}
-                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
-                        <span className="text-[10px] text-gray-400 dark:text-gray-500">
+                      <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                        <span className="text-[10px] text-muted-foreground">
                           {formatMessageTime(msg.timestamp)}
                         </span>
                         <MessageActions
@@ -1114,12 +1139,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                     </div>
                   )}
 
-                  {/* 加载状态 */}
+                  {/* 加载状态 with streaming cursor */}
                   {!msg.content && isSending && (
-                    <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-                      <div className="flex items-center gap-2 text-gray-400 dark:text-gray-500">
-                        <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-pulse"></div>
-                        <span className="text-sm">Thinking...</span>
+                    <div className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <span className="text-sm">Thinking</span>
+                        <span className="streaming-cursor text-accent">▋</span>
                       </div>
                     </div>
                   )}
@@ -1140,7 +1165,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
       </div>
 
       {/* Input Footer */}
-      <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-800/80 backdrop-blur-md flex-shrink-0">
+      <div className="p-6 border-t border-border bg-card/80 backdrop-blur-md flex-shrink-0">
         <div className="max-w-4xl mx-auto space-y-4">
            {/* Quick Actions Row */}
            <div className="flex items-center gap-2">
@@ -1162,28 +1187,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
              <div className="ml-auto relative" ref={statusMenuRef}>
                 <button
                   onClick={() => setIsStatusMenuOpen(!isStatusMenuOpen)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-muted border border-border rounded-lg text-xs font-semibold text-foreground hover:bg-muted/80 transition-colors"
                 >
                   <StatusIcon status={session.status || 'todo'} size={14} />
                   {SESSION_STATUS_CONFIG.find(s => s.id === (session.status || 'todo'))?.label || 'Todo'}
-                  <ChevronDown size={12} className={`transition-transform ${isStatusMenuOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown size={12} className={`text-muted-foreground transition-transform ${isStatusMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
 
                 {/* Status Dropdown Menu */}
                 {isStatusMenuOpen && (
-                  <div className="absolute right-0 bottom-full mb-2 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                  <div className="absolute right-0 bottom-full mb-2 w-44 bg-card rounded-xl shadow-lg border border-border py-1 z-50">
                     {SESSION_STATUS_CONFIG.map((statusConfig) => (
                       <button
                         key={statusConfig.id}
                         onClick={() => handleStatusChange(statusConfig.id)}
-                        className={`w-full px-3 py-2 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors ${
-                          session.status === statusConfig.id ? 'bg-gray-50 dark:bg-gray-700' : ''
+                        className={`w-full px-3 py-2 flex items-center gap-3 hover:bg-muted text-foreground transition-colors ${
+                          session.status === statusConfig.id ? 'bg-muted' : ''
                         }`}
                       >
                         <StatusIcon status={statusConfig.id} size={16} />
                         <span className="text-sm">{statusConfig.label}</span>
                         {session.status === statusConfig.id && (
-                          <Check size={14} className="ml-auto text-green-500" />
+                          <Check size={14} className="ml-auto text-success" />
                         )}
                       </button>
                     ))}
@@ -1193,14 +1218,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
            </div>
 
            {/* Input Box */}
-           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm transition-all p-3">
+           <div className="bg-card border border-border rounded-2xl shadow-sm transition-all overflow-hidden">
               {/* Attachments display */}
-              <Attachments
-                attachments={attachments}
-                onAdd={handleAddAttachments}
-                onRemove={handleRemoveAttachment}
-                disabled={isSending}
-              />
+              <div className="p-3 pb-0">
+                <Attachments
+                  attachments={attachments}
+                  onAdd={handleAddAttachments}
+                  onRemove={handleRemoveAttachment}
+                  disabled={isSending}
+                />
+              </div>
 
               {/* Hidden file input */}
               <input
@@ -1217,7 +1244,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                 className="hidden"
               />
 
-              <div className="relative">
+              <div className="relative px-3">
                 <textarea
                   ref={textareaRef}
                   value={inputValue}
@@ -1233,8 +1260,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                       handleSend();
                     }
                   }}
-                  placeholder="What would you like to work on? Type @ to mention files"
-                  className="w-full resize-none border-none outline-none focus:ring-0 focus:outline-none text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 bg-transparent overflow-y-auto"
+                  placeholder="What would you like to work on?"
+                  className="w-full resize-none border-none outline-none focus:ring-0 focus:outline-none text-sm text-foreground placeholder-muted-foreground bg-transparent overflow-y-auto py-3"
                   style={{ minHeight: '60px', maxHeight: '200px' }}
                 />
 
@@ -1257,34 +1284,51 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                   onClose={() => setSlashCommandState({ isVisible: false, query: '' })}
                 />
               </div>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-50 dark:border-gray-700">
-                <div className="flex items-center gap-1 text-gray-400 dark:text-gray-500">
+
+              {/* Action bar with visible affordances */}
+              <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-muted/30">
+                <div className="flex items-center gap-1 text-muted-foreground">
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-muted rounded-lg transition-colors text-xs"
                     title="Attach files"
                     disabled={isSending}
                   >
-                    <Paperclip size={18} />
+                    <Paperclip size={14} />
+                    <span className="hidden sm:inline">Attach</span>
                   </button>
-                  <button className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"><Database size={18} /></button>
-                  <button className="p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"><Home size={18} /></button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {tokenUsage && <TokenUsageDisplay usage={tokenUsage} />}
-                  {/* Model ID Display - click to open settings */}
+                  <span className="w-px h-4 bg-border mx-1" />
                   <button
-                    onClick={() => onOpenSettings?.('apis')}
-                    className="text-[11px] font-mono text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 max-w-[280px] truncate transition-colors"
-                    title={`Model: ${currentModel} (click to configure)`}
+                    onClick={() => {
+                      setInputValue(prev => prev + '@');
+                      textareaRef.current?.focus();
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-muted rounded-lg transition-colors text-xs"
+                    title="Mention files or symbols"
                     disabled={isSending}
                   >
-                    {currentModel}
+                    <span className="font-medium">@</span>
+                    <span className="hidden sm:inline">Mention</span>
                   </button>
+                  <button
+                    onClick={() => {
+                      setInputValue('/');
+                      textareaRef.current?.focus();
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 hover:bg-muted rounded-lg transition-colors text-xs"
+                    title="Run a command"
+                    disabled={isSending}
+                  >
+                    <span className="font-medium">/</span>
+                    <span className="hidden sm:inline">Command</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  {tokenUsage && <TokenUsageDisplay usage={tokenUsage} />}
                   {isSending ? (
                     <button
                       onClick={handleInterrupt}
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shadow-md transition-all bg-red-500 text-white hover:bg-red-600 active:scale-90"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm transition-all bg-danger text-white hover:bg-danger/90 active:scale-95"
                       title="Stop (Esc)"
                     >
                       <Square size={14} fill="currentColor" />
@@ -1293,10 +1337,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                     <button
                       onClick={handleSend}
                       disabled={!inputValue.trim() && attachments.length === 0}
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-md transition-all ${
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center shadow-sm transition-all ${
                         inputValue.trim() || attachments.length > 0
-                          ? 'bg-gray-800 dark:bg-indigo-600 text-white hover:bg-gray-900 dark:hover:bg-indigo-700 active:scale-90'
-                          : 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500'
+                          ? 'bg-accent text-accent-foreground hover:bg-accent/90 active:scale-95'
+                          : 'bg-muted text-muted-foreground'
                       }`}
                     >
                       <Send size={16} />
@@ -1304,6 +1348,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                   )}
                 </div>
               </div>
+           </div>
+
+           {/* Context line */}
+           <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+             {session.workspacePath && (
+               <>
+                 <span className="flex items-center gap-1 text-success">
+                   <Brain size={10} />
+                   Memory
+                 </span>
+                 <span>•</span>
+               </>
+             )}
+             <span className={chatMode === 'agent' ? 'text-agent-mode' : 'text-chat-mode'}>
+               {chatMode === 'agent' ? 'Agent' : 'Chat'} mode
+             </span>
+             <span>•</span>
+             <button
+               onClick={() => onOpenSettings?.('apis')}
+               className="font-mono hover:text-foreground transition-colors truncate max-w-[200px]"
+               title={`Model: ${currentModel} (click to configure)`}
+             >
+               {currentModel}
+             </button>
            </div>
         </div>
       </div>

@@ -268,6 +268,26 @@
         .stagger-4 { animation-delay: 0.2s; }
         .stagger-5 { animation-delay: 0.25s; }
 
+        /* Streaming cursor for thinking state */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        .streaming-cursor {
+            animation: blink 0.8s step-end infinite;
+        }
+
+        /* Memory pulse animation */
+        @keyframes memoryPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .memory-badge {
+            animation: memoryPulse 2s ease-in-out infinite;
+        }
+
         /* Respect reduced motion preferences */
         @media (prefers-reduced-motion: reduce) {
             *,

@@ -595,11 +595,11 @@ All aesthetic changes must maintain accessibility:
 3. ✅ Spacing: Improved line-height (1.72 for content)
 4. ✅ Buttons: Added hover lift effect with shadows
 
-### Phase 2: Core Components
-1. Redesign mode selector as toggle
-2. Improve message input area
-3. Add message animations
-4. Refine empty states
+### Phase 2: Core Components ✅ COMPLETED
+1. ✅ Redesign mode selector as toggle (sliding indicator, mode-specific colors)
+2. ✅ Improve message input area (visible affordances: Attach, @Mention, /Command; context line)
+3. ✅ Add message animations (messageIn animation, streaming cursor)
+4. ✅ Refine empty states (friendly illustration, suggested prompts grid)
 
 ### Phase 3: Polish
 1. Add paper grain texture
@@ -609,8 +609,8 @@ All aesthetic changes must maintain accessibility:
 
 ### Phase 4: Delight
 1. Custom illustrations for empty states
-2. Streaming text cursor
-3. Memory pulse animation
+2. ✅ Streaming text cursor (implemented in Phase 2)
+3. ✅ Memory pulse animation (implemented in Phase 2)
 4. Seasonal theme variations (optional)
 
 ---
