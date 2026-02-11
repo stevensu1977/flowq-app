@@ -26,6 +26,8 @@ import { PermissionMode } from './PermissionModeSelector';
 import { DEFAULT_MODELS, ModelOption } from './ModelSelector';
 import McpManager from './McpManager';
 import SkillsManager from './SkillsManager';
+import ClaudeCodeSetup from './ClaudeCodeSetup';
+import EnvironmentSetup from './EnvironmentSetup';
 import type { ApiSettings } from '../lib/tauri-api';
 import { DEFAULT_API_SETTINGS } from '../lib/tauri-api';
 
@@ -225,6 +227,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
             {/* Preferences Settings */}
             {activeTab === 'preferences' && (
               <div className="space-y-6">
+                {/* Claude Code CLI */}
+                <ClaudeCodeSetup />
+
+                {/* Divider */}
+                <div className="border-t border-border" />
+
                 {/* Behavior Toggles */}
                 <div className="space-y-3">
                   <label className="text-sm font-medium text-foreground">
@@ -694,7 +702,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
             )}
 
             {/* MCP Servers Settings */}
-            {activeTab === 'mcp' && <McpManager />}
+            {activeTab === 'mcp' && (
+              <div className="space-y-6">
+                {/* Environment Status */}
+                <div className="pb-4 border-b border-border">
+                  <EnvironmentSetup />
+                </div>
+                {/* MCP Servers */}
+                <McpManager />
+              </div>
+            )}
 
             {/* Skills Settings */}
             {activeTab === 'skills' && <SkillsManager />}

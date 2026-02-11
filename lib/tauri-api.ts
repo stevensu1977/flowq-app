@@ -803,3 +803,63 @@ export async function saveApiSettings(settings: ApiSettings): Promise<void> {
     console.error('Failed to save API settings:', e)
   }
 }
+
+// ============ Claude Code CLI API ============
+
+export interface ClaudeCodeStatus {
+  installed: boolean
+  version: string | null
+  path: string | null
+}
+
+/**
+ * Check if Claude Code CLI is installed
+ */
+export async function checkClaudeCode(): Promise<ClaudeCodeStatus> {
+  return invoke<ClaudeCodeStatus>('check_claude_code')
+}
+
+/**
+ * Install Claude Code CLI using official script
+ */
+export async function installClaudeCode(): Promise<string> {
+  return invoke<string>('install_claude_code')
+}
+
+/**
+ * Get the install command for manual installation
+ */
+export async function getClaudeCodeInstallCommand(): Promise<string> {
+  return invoke<string>('get_claude_code_install_command')
+}
+
+// ============ Environment Check API ============
+
+export interface ToolStatus {
+  name: string
+  installed: boolean
+  version: string | null
+  path: string | null
+}
+
+export interface EnvironmentStatus {
+  node: ToolStatus
+  npx: ToolStatus
+  uvx: ToolStatus
+  uv: ToolStatus
+  python: ToolStatus
+}
+
+/**
+ * Check all MCP-related environment tools
+ */
+export async function checkEnvironment(): Promise<EnvironmentStatus> {
+  return invoke<EnvironmentStatus>('check_environment')
+}
+
+/**
+ * Check a single tool's status
+ */
+export async function checkToolStatus(name: string): Promise<ToolStatus> {
+  return invoke<ToolStatus>('check_tool_status', { name })
+}

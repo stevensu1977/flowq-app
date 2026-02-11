@@ -1314,6 +1314,172 @@ async fn send_message(
     Ok(assistant_msg_id)
 }
 
+// ============ Claude Code CLI Commands ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeCodeStatus {
+    pub installed: bool,
+    pub version: Option<String>,
+    pub path: Option<String>,
+}
+
+/// Check if Claude Code CLI is installed
+#[tauri::command]
+async fn check_claude_code() -> Result<ClaudeCodeStatus, String> {
+    use std::process::Command;
+
+    // Try to find claude in PATH
+    let output = Command::new("which")
+        .arg("claude")
+        .output();
+
+    match output {
+        Ok(result) if result.status.success() => {
+            let path = String::from_utf8_lossy(&result.stdout).trim().to_string();
+
+            // Try to get version
+            let version_output = Command::new("claude")
+                .arg("--version")
+                .output();
+
+            let version = version_output.ok().and_then(|v| {
+                if v.status.success() {
+                    Some(String::from_utf8_lossy(&v.stdout).trim().to_string())
+                } else {
+                    None
+                }
+            });
+
+            Ok(ClaudeCodeStatus {
+                installed: true,
+                version,
+                path: Some(path),
+            })
+        }
+        _ => {
+            Ok(ClaudeCodeStatus {
+                installed: false,
+                version: None,
+                path: None,
+            })
+        }
+    }
+}
+
+/// Install Claude Code CLI using official script
+#[tauri::command]
+async fn install_claude_code(app: AppHandle) -> Result<String, String> {
+    use std::process::Command;
+
+    // Run the official install script
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg("curl -fsSL https://claude.ai/install.sh | bash")
+        .output()
+        .map_err(|e| format!("Failed to run install script: {}", e))?;
+
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(format!("Claude Code installed successfully!\n{}", stdout))
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        Err(format!("Installation failed: {}", stderr))
+    }
+}
+
+/// Get the install command for manual installation
+#[tauri::command]
+fn get_claude_code_install_command() -> String {
+    "curl -fsSL https://claude.ai/install.sh | bash".to_string()
+}
+
+// ============ Environment Check Commands ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolStatus {
+    pub name: String,
+    pub installed: bool,
+    pub version: Option<String>,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentStatus {
+    pub node: ToolStatus,
+    pub npx: ToolStatus,
+    pub uvx: ToolStatus,
+    pub uv: ToolStatus,
+    pub python: ToolStatus,
+}
+
+/// Check a single tool's status
+fn check_tool(name: &str, version_arg: &str) -> ToolStatus {
+    use std::process::Command;
+
+    let which_output = Command::new("which")
+        .arg(name)
+        .output();
+
+    match which_output {
+        Ok(result) if result.status.success() => {
+            let path = String::from_utf8_lossy(&result.stdout).trim().to_string();
+
+            // Try to get version
+            let version_output = Command::new(name)
+                .arg(version_arg)
+                .output();
+
+            let version = version_output.ok().and_then(|v| {
+                if v.status.success() {
+                    let output = String::from_utf8_lossy(&v.stdout).trim().to_string();
+                    // Extract version number from output
+                    Some(output.lines().next().unwrap_or(&output).to_string())
+                } else {
+                    None
+                }
+            });
+
+            ToolStatus {
+                name: name.to_string(),
+                installed: true,
+                version,
+                path: Some(path),
+            }
+        }
+        _ => {
+            ToolStatus {
+                name: name.to_string(),
+                installed: false,
+                version: None,
+                path: None,
+            }
+        }
+    }
+}
+
+/// Check all MCP-related environment tools
+#[tauri::command]
+async fn check_environment() -> Result<EnvironmentStatus, String> {
+    Ok(EnvironmentStatus {
+        node: check_tool("node", "--version"),
+        npx: check_tool("npx", "--version"),
+        uvx: check_tool("uvx", "--version"),
+        uv: check_tool("uv", "--version"),
+        python: check_tool("python3", "--version"),
+    })
+}
+
+/// Check a single tool
+#[tauri::command]
+async fn check_tool_status(name: String) -> Result<ToolStatus, String> {
+    let version_arg = match name.as_str() {
+        "node" | "npx" | "uv" | "uvx" => "--version",
+        "python" | "python3" => "--version",
+        _ => "--version",
+    };
+    Ok(check_tool(&name, version_arg))
+}
+
 // ============ App Entry ============
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1429,6 +1595,13 @@ pub fn run() {
             memory_tool_insert,
             memory_tool_delete,
             memory_tool_rename,
+            // Claude Code CLI commands
+            check_claude_code,
+            install_claude_code,
+            get_claude_code_install_command,
+            // Environment check commands
+            check_environment,
+            check_tool_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

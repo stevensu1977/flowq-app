@@ -17,6 +17,7 @@ import {
   CircleAlert,
   CircleCheck,
   CircleX,
+  X,
   Square,
   FolderOpen,
   Brain,
@@ -25,7 +26,7 @@ import { ChatSession, ChatMessage, Step, SessionStatus, SESSION_STATUS_CONFIG, T
 import AgentSteps from './AgentSteps';
 import ArchitectureDiagram from './ArchitectureDiagram';
 import MarkdownContent from './MarkdownContent';
-import { sendMessage, createSession, chatSend, searchWorkspaceFiles, readFileForMention, fetchUrlForMention, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS, type WorkspaceFile } from '../lib/tauri-api';
+import { sendMessage, createSession, chatSend, searchWorkspaceFiles, readFileForMention, fetchUrlForMention, checkClaudeCode, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS, type WorkspaceFile, type ClaudeCodeStatus } from '../lib/tauri-api';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { DocumentMarkdownOverlay } from './overlay/DocumentMarkdownOverlay';
 import EscapeInterruptOverlay from './EscapeInterruptOverlay';
@@ -186,6 +187,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask');
   // Chat mode configuration
   const [chatMode, setChatMode] = useState<ChatMode>('agent');
+  const [claudeCodeStatus, setClaudeCodeStatus] = useState<ClaudeCodeStatus | null>(null);
+  const [showClaudeCodeWarning, setShowClaudeCodeWarning] = useState(false);
   const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
   // Chat history for simple chat mode (managed locally)
   const chatHistoryRef = useRef<SimpleChatMessage[]>([]);
@@ -218,6 +221,29 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
       textarea.style.height = `${newHeight}px`;
     }
   }, [inputValue]);
+
+  // Check Claude Code CLI status on mount
+  useEffect(() => {
+    checkClaudeCode().then(status => {
+      setClaudeCodeStatus(status);
+      // Show warning if in agent mode and CLI not installed
+      if (chatMode === 'agent' && !status.installed) {
+        setShowClaudeCodeWarning(true);
+      }
+    }).catch(err => {
+      console.error('Failed to check Claude Code status:', err);
+    });
+  }, []);
+
+  // Handle chat mode change with Claude Code check
+  const handleChatModeChange = useCallback((newMode: ChatMode) => {
+    setChatMode(newMode);
+    if (newMode === 'agent' && claudeCodeStatus && !claudeCodeStatus.installed) {
+      setShowClaudeCodeWarning(true);
+    } else {
+      setShowClaudeCodeWarning(false);
+    }
+  }, [claudeCodeStatus]);
 
   // Escape key to show interrupt overlay when sending
   useEffect(() => {
@@ -1354,7 +1380,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
              {/* Chat Mode Selector */}
              <ChatModeSelector
                mode={chatMode}
-               onChange={setChatMode}
+               onChange={handleChatModeChange}
                disabled={isSending}
              />
              {/* Permission Mode Selector - only show in agent mode */}
@@ -1398,6 +1424,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                 )}
              </div>
            </div>
+
+           {/* Claude Code CLI Warning */}
+           {showClaudeCodeWarning && chatMode === 'agent' && (
+             <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-sm">
+               <div className="flex-shrink-0 w-8 h-8 bg-amber-100 dark:bg-amber-800 rounded-lg flex items-center justify-center">
+                 <CircleAlert size={18} className="text-amber-600 dark:text-amber-400" />
+               </div>
+               <div className="flex-1">
+                 <span className="text-amber-800 dark:text-amber-200 font-medium">Claude Code CLI not installed</span>
+                 <span className="text-amber-600 dark:text-amber-400 ml-2">Agent mode requires Claude Code CLI.</span>
+               </div>
+               <button
+                 onClick={() => onOpenSettings?.('providers')}
+                 className="px-3 py-1.5 bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200 rounded-lg text-xs font-medium hover:bg-amber-300 dark:hover:bg-amber-700 transition-colors"
+               >
+                 Install
+               </button>
+               <button
+                 onClick={() => setShowClaudeCodeWarning(false)}
+                 className="p-1 hover:bg-amber-200 dark:hover:bg-amber-800 rounded transition-colors"
+               >
+                 <X size={14} className="text-amber-600 dark:text-amber-400" />
+               </button>
+             </div>
+           )}
 
            {/* Input Box */}
            <div className="relative bg-card border border-border rounded-2xl shadow-sm transition-all">
