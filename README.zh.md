@@ -58,6 +58,48 @@ FlowQ 将 AI 带到你的桌面——**本地运行**，**数据私密**，**即
 
 ---
 
+## 浏览器扩展
+
+FlowQ 包含一个 Chrome 扩展，可利用您现有的登录会话实现 AI 驱动的浏览器自动化。
+
+<div align="center">
+<table>
+<tr>
+<td align="center"><img src="screenshots/chrome-extension.png" width="300" alt="Chrome 扩展"><br><em>扩展弹窗</em></td>
+<td align="center"><img src="screenshots/chrome-extension-wxreader-01.png" width="400" alt="浏览器控制演示"><br><em>AI 浏览器控制</em></td>
+</tr>
+</table>
+</div>
+
+### 核心优势
+
+| 功能 | 描述 |
+|------|------|
+| **免重复登录** | 直接使用已登录的会话（GitHub、Notion、Twitter 等） |
+| **页面理解** | AI 通过无障碍树读取页面内容 |
+| **浏览器控制** | 程序化点击、输入、滚动、导航 |
+| **实时同步** | 与 FlowQ 桌面应用的 WebSocket 连接 |
+
+### 快速安装
+
+1. 打开 `chrome://extensions/` 并启用 **开发者模式**
+2. 点击 **加载已解压的扩展程序**，选择 `flowq-extension` 文件夹
+3. 启动 FlowQ 桌面应用
+4. 点击 FlowQ 扩展图标验证连接状态
+
+### 使用方法
+
+在 FlowQ 中使用 `@#` 语法引用浏览器标签页：
+
+```
+@#123   这个页面讲了什么？
+@#      点击"登录"按钮
+```
+
+详细说明请参阅 [浏览器扩展指南](docs/BROWSER_EXTENSION.md)。
+
+---
+
 ## 截图预览
 
 <div align="center">
@@ -200,6 +242,7 @@ MCP 服务器配置存储在 `~/.claude.json`：
 
 | 文档 | 描述 |
 |------|------|
+| [BROWSER_EXTENSION.md](docs/BROWSER_EXTENSION.md) | 浏览器扩展安装与使用指南 |
 | [ROADMAP.md](docs/ROADMAP.md) | 产品路线图和功能规划 |
 | [INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md) | 第三方集成架构设计 |
 | [MEMORY_TODO.md](docs/MEMORY_TODO.md) | 记忆系统实现计划 |

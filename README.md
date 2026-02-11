@@ -58,6 +58,48 @@ One window. One workspace. One flow.
 
 ---
 
+## Browser Extension
+
+FlowQ includes a Chrome extension for AI-powered browser automation using your existing login sessions.
+
+<div align="center">
+<table>
+<tr>
+<td align="center"><img src="screenshots/chrome-extension.png" width="300" alt="Chrome Extension"><br><em>Extension Popup</em></td>
+<td align="center"><img src="screenshots/chrome-extension-wxreader-01.png" width="400" alt="Browser Control Demo"><br><em>AI Browser Control</em></td>
+</tr>
+</table>
+</div>
+
+### Key Benefits
+
+| Feature | Description |
+|---------|-------------|
+| **Zero Re-auth** | Use already logged-in sessions (GitHub, Notion, Twitter, etc.) |
+| **Page Understanding** | AI reads page content via accessibility tree |
+| **Browser Control** | Click, type, scroll, navigate programmatically |
+| **Real-time Sync** | WebSocket connection with FlowQ desktop |
+
+### Quick Setup
+
+1. Open `chrome://extensions/` and enable **Developer mode**
+2. Click **Load unpacked** and select the `flowq-extension` folder
+3. Start FlowQ desktop app
+4. Click the FlowQ extension icon to verify connection
+
+### Usage
+
+Mention browser tabs in FlowQ using `@#` syntax:
+
+```
+@#123   What's on this page?
+@#      Click the "Sign In" button
+```
+
+For detailed instructions, see [Browser Extension Guide](docs/BROWSER_EXTENSION.md).
+
+---
+
 ## Screenshots
 
 <div align="center">
@@ -200,6 +242,7 @@ Prompt template here with {{variables}}
 
 | Document | Description |
 |----------|-------------|
+| [BROWSER_EXTENSION.md](docs/BROWSER_EXTENSION.md) | Browser extension installation and usage guide |
 | [ROADMAP.md](docs/ROADMAP.md) | Product roadmap and feature planning |
 | [INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md) | Third-party integrations architecture |
 | [MEMORY_TODO.md](docs/MEMORY_TODO.md) | Memory system implementation plan |
