@@ -3,7 +3,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use claude_agent_sdk::{query, ClaudeAgentOptions, ContentBlock, Message as ClaudeMessage, PermissionMode, SessionId};
+use claude_agent_sdk_rs::{
+    query_stream, ClaudeAgentOptions, ContentBlock, Message as ClaudeMessage,
+    PermissionMode, McpServers,
+};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -462,6 +465,41 @@ fn skill_open_folder(name: String) -> Result<(), String> {
     SkillManager::open_folder(&name).map_err(|e| e.to_string())
 }
 
+/// Open a directory in the system file manager
+#[tauri::command]
+fn open_directory(path: String) -> Result<(), String> {
+    let dir = PathBuf::from(&path);
+    if !dir.exists() {
+        return Err(format!("Directory does not exist: {}", path));
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open directory: {}", e))?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 async fn skill_search(query: String) -> Result<Vec<SearchSkill>, String> {
     SkillManager::search(&query).await.map_err(|e| e.to_string())
@@ -528,6 +566,197 @@ async fn memory_get_stats(workspace: String) -> Result<MemoryStats, String> {
 
     index.get_stats()
         .map_err(|e| format!("Failed to get memory stats: {}", e))
+}
+
+// ============ Workspace File Search ============
+
+/// File search result for @file mention
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceFile {
+    pub name: String,
+    pub path: String,
+    pub relative_path: String,
+    pub is_dir: bool,
+    pub size: Option<u64>,
+}
+
+/// Search files in workspace directory
+#[tauri::command]
+async fn search_workspace_files(
+    workspace: String,
+    query: String,
+    max_results: Option<usize>,
+) -> Result<Vec<WorkspaceFile>, String> {
+    let workspace_path = PathBuf::from(&workspace);
+    if !workspace_path.exists() {
+        return Err(format!("Workspace does not exist: {}", workspace));
+    }
+
+    let limit = max_results.unwrap_or(20);
+    let query_lower = query.to_lowercase();
+    let mut results = Vec::new();
+
+    // Recursively search files
+    fn search_dir(
+        dir: &PathBuf,
+        base: &PathBuf,
+        query: &str,
+        results: &mut Vec<WorkspaceFile>,
+        limit: usize,
+        depth: usize,
+    ) {
+        if results.len() >= limit || depth > 5 {
+            return;
+        }
+
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                if results.len() >= limit {
+                    break;
+                }
+
+                let path = entry.path();
+                let name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                // Skip hidden files and common ignored directories
+                if name.starts_with('.') ||
+                   name == "node_modules" ||
+                   name == "target" ||
+                   name == "dist" ||
+                   name == "build" ||
+                   name == "__pycache__" {
+                    continue;
+                }
+
+                let relative_path = path.strip_prefix(base)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+
+                // Match against name or path
+                if name.to_lowercase().contains(query) ||
+                   relative_path.to_lowercase().contains(query) {
+                    let metadata = fs::metadata(&path).ok();
+                    results.push(WorkspaceFile {
+                        name: name.clone(),
+                        path: path.to_string_lossy().to_string(),
+                        relative_path,
+                        is_dir: path.is_dir(),
+                        size: metadata.map(|m| m.len()),
+                    });
+                }
+
+                // Recurse into directories
+                if path.is_dir() && results.len() < limit {
+                    search_dir(&path, base, query, results, limit, depth + 1);
+                }
+            }
+        }
+    }
+
+    search_dir(&workspace_path, &workspace_path, &query_lower, &mut results, limit, 0);
+
+    // Sort: directories first, then by name
+    results.sort_by(|a, b| {
+        match (a.is_dir, b.is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+
+    Ok(results)
+}
+
+/// Read file content for @file mention injection
+#[tauri::command]
+async fn read_file_for_mention(
+    path: String,
+    max_lines: Option<usize>,
+) -> Result<String, String> {
+    let file_path = PathBuf::from(&path);
+    if !file_path.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    if file_path.is_dir() {
+        // For directories, return file listing
+        let mut listing = format!("Directory: {}\n\n", path);
+        if let Ok(entries) = fs::read_dir(&file_path) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') {
+                    continue;
+                }
+                let is_dir = entry.path().is_dir();
+                listing.push_str(&format!("{}{}\n", if is_dir { "📁 " } else { "📄 " }, name));
+            }
+        }
+        return Ok(listing);
+    }
+
+    // Read file content
+    let content = fs::read_to_string(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Optionally limit lines
+    if let Some(limit) = max_lines {
+        let lines: Vec<&str> = content.lines().take(limit).collect();
+        let truncated = lines.len() < content.lines().count();
+        let mut result = lines.join("\n");
+        if truncated {
+            result.push_str(&format!("\n\n... (truncated, showing first {} lines)", limit));
+        }
+        Ok(result)
+    } else {
+        Ok(content)
+    }
+}
+
+/// Fetch URL content for @url mention
+#[tauri::command]
+async fn fetch_url_for_mention(url: String) -> Result<String, String> {
+    // Basic URL validation
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("Invalid URL: must start with http:// or https://".to_string());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch URL: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP error: {}", response.status()));
+    }
+
+    let content_type = response.headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    // Only process text content
+    if !content_type.contains("text") && !content_type.contains("json") && !content_type.contains("xml") {
+        return Err(format!("Unsupported content type: {}", content_type));
+    }
+
+    let text = response.text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    // Limit content size (max 50KB)
+    if text.len() > 50 * 1024 {
+        Ok(format!("{}\n\n... (content truncated, showing first 50KB)", &text[..50 * 1024]))
+    } else {
+        Ok(text)
+    }
 }
 
 // ============ Memory Tool Commands ============
@@ -785,25 +1014,23 @@ async fn send_message(
     };
 
     // Build options with conversation continuation
-    let mut options_builder = ClaudeAgentOptions::builder()
-        .permission_mode(PermissionMode::BypassPermissions);  // 跳过权限提示，避免超时
-
-    // If this is a continuation, use --continue flag to maintain conversation state
-    // The CLI will automatically manage conversation history
-    if has_history {
-        log::info!("Continuing conversation for session: {}", session_id);
-        options_builder = options_builder.continue_conversation(true);
-        // Also try to resume from the session ID if CLI supports it
-        options_builder = options_builder.resume(SessionId::new(session_id.clone()));
-    }
+    // Collect all optional values first, then construct options using struct initialization
 
     // Set working directory if workspace is set
-    if let Some(ref ws_path) = workspace_path {
-        log::info!("Using workspace directory: {}", ws_path);
-        options_builder = options_builder.cwd(ws_path.as_str());
-    }
+    let cwd_path: Option<PathBuf> = workspace_path.as_ref().map(|ws| {
+        log::info!("Using workspace directory: {}", ws);
+        PathBuf::from(ws)
+    });
 
-    // Build system prompt with memory context
+    // If this is a continuation, use --continue flag to maintain conversation state
+    let (continue_conversation, resume_session) = if has_history {
+        log::info!("Continuing conversation for session: {}", session_id);
+        (true, Some(session_id.clone()))
+    } else {
+        (false, None)
+    };
+
+    // Build system prompt with memory context and workspace instruction
     let enhanced_system_prompt = if let Some(ref ws_path) = workspace_path {
         let workspace_dir = PathBuf::from(ws_path);
         // Try to get memory context
@@ -812,43 +1039,88 @@ async fn send_message(
             .and_then(|index| index.get_context().ok())
             .unwrap_or_default();
 
+        // Workspace instruction: always save files to workspace directory
+        let workspace_instruction = format!(
+            "# Workspace Directory\n\n\
+            Your current working directory is: {}\n\
+            IMPORTANT: When creating or saving any files (documents, code, artifacts, etc.), \
+            ALWAYS save them to the current working directory or its subdirectories. \
+            NEVER use /tmp or other temporary directories. Use relative paths from the workspace root.\n\n---\n\n",
+            ws_path
+        );
+
+        let base_prompt = system_prompt.unwrap_or_default();
+
         if !memory_context.is_empty() {
-            let base_prompt = system_prompt.unwrap_or_default();
             // Memory context instruction: only reference when relevant, don't proactively mention
             let memory_header = "# Background Information (Reference ONLY when relevant to user's question - DO NOT proactively mention)\n\n";
-            if base_prompt.is_empty() {
-                Some(format!(
-                    "{}{}\n\n---\n",
-                    memory_header,
-                    memory_context.trim()
-                ))
-            } else {
-                Some(format!(
-                    "{}{}\n\n---\n\n{}",
-                    memory_header,
-                    memory_context.trim(),
-                    base_prompt
-                ))
-            }
+            Some(format!(
+                "{}{}{}\n\n---\n\n{}",
+                workspace_instruction,
+                memory_header,
+                memory_context.trim(),
+                base_prompt
+            ))
+        } else if !base_prompt.is_empty() {
+            Some(format!("{}{}", workspace_instruction, base_prompt))
         } else {
-            system_prompt
+            Some(workspace_instruction)
         }
     } else {
         system_prompt
     };
 
-    if let Some(prompt) = enhanced_system_prompt {
-        options_builder = options_builder.system_prompt(prompt.as_str());
-    }
+    // Load skills and add to system prompt
+    // Skills are loaded from: ~/.claude/skills/ and {workspace}/.claude/skills/
+    let skills_prompt = {
+        let mut skills_content = String::new();
+        let ws_path = workspace_path.as_deref();
+        if let Ok(skills) = SkillManager::list_all(ws_path) {
+            if !skills.is_empty() {
+                skills_content.push_str("\n\n# Available Skills\n\n");
+                skills_content.push_str("The following skills are installed and available. Use them when relevant:\n\n");
+                for skill in &skills {
+                    // Use the full path stored in SkillInfo
+                    if let Ok(content) = SkillManager::get_content_from_path(&skill.path) {
+                        skills_content.push_str(&format!("## Skill: {}\n\n", skill.name));
+                        skills_content.push_str(&content);
+                        skills_content.push_str("\n\n---\n\n");
+                    }
+                }
+                log::info!("Loaded {} skills into system prompt from global and workspace directories", skills.len());
+            }
+        }
+        skills_content
+    };
+
+    // Combine system prompt with skills
+    let final_system_prompt = match enhanced_system_prompt {
+        Some(prompt) if !skills_prompt.is_empty() => Some(format!("{}{}", prompt, skills_prompt)),
+        Some(prompt) => Some(prompt),
+        None if !skills_prompt.is_empty() => Some(skills_prompt),
+        None => None,
+    };
+
+    // Convert final_system_prompt to SystemPrompt type
+    let system_prompt_option = final_system_prompt.map(claude_agent_sdk_rs::SystemPrompt::from);
 
     // Load MCP servers from ~/.claude.json
-    if let Some(home) = dirs::home_dir() {
-        let mcp_config_path = home.join(".claude.json");
-        if mcp_config_path.exists() {
-            log::info!("Loading MCP config from: {:?}", mcp_config_path);
-            options_builder = options_builder.mcp_servers_path(mcp_config_path);
-        }
-    }
+    let mcp_servers = dirs::home_dir()
+        .map(|home| home.join(".claude.json"))
+        .filter(|p| {
+            if p.exists() {
+                log::info!("Loading MCP config from: {:?}", p);
+                true
+            } else {
+                false
+            }
+        })
+        .map(McpServers::Path)
+        .unwrap_or_default();
+
+    // Build environment variables and model
+    let mut env_vars: HashMap<String, String> = HashMap::new();
+    let mut model_option: Option<String> = None;
 
     // Apply API settings (provider, model, credentials)
     if let Some(ref settings) = api_settings {
@@ -857,51 +1129,61 @@ async fn send_message(
         if settings.provider == "bedrock" {
             // For Bedrock, set model and AWS credentials via environment variables
             if let Some(ref model) = settings.bedrock_model {
-                options_builder = options_builder.model(model.clone());
+                model_option = Some(model.clone());
             }
             if let Some(ref region) = settings.bedrock_region {
-                options_builder = options_builder.env("AWS_REGION", region.clone());
-                options_builder = options_builder.env("AWS_DEFAULT_REGION", region.clone());
+                env_vars.insert("AWS_REGION".to_string(), region.clone());
+                env_vars.insert("AWS_DEFAULT_REGION".to_string(), region.clone());
             }
             // Set AWS credentials based on auth method
             if settings.bedrock_auth_method.as_deref() == Some("access_key") {
                 if let Some(ref access_key) = settings.bedrock_access_key_id {
-                    options_builder = options_builder.env("AWS_ACCESS_KEY_ID", access_key.clone());
+                    env_vars.insert("AWS_ACCESS_KEY_ID".to_string(), access_key.clone());
                 }
                 if let Some(ref secret_key) = settings.bedrock_secret_access_key {
-                    options_builder = options_builder.env("AWS_SECRET_ACCESS_KEY", secret_key.clone());
+                    env_vars.insert("AWS_SECRET_ACCESS_KEY".to_string(), secret_key.clone());
                 }
             } else if let Some(ref profile) = settings.bedrock_profile {
                 // Use AWS profile
-                options_builder = options_builder.env("AWS_PROFILE", profile.clone());
+                env_vars.insert("AWS_PROFILE".to_string(), profile.clone());
             }
             // Tell Claude Code to use Bedrock provider
-            options_builder = options_builder.env("CLAUDE_CODE_USE_BEDROCK", "1");
+            env_vars.insert("CLAUDE_CODE_USE_BEDROCK".to_string(), "1".to_string());
         } else {
             // For Anthropic direct API
             if let Some(ref model) = settings.anthropic_model {
-                options_builder = options_builder.model(model.clone());
+                model_option = Some(model.clone());
             }
             if let Some(ref api_key) = settings.anthropic_api_key {
-                options_builder = options_builder.env("ANTHROPIC_API_KEY", api_key.clone());
+                env_vars.insert("ANTHROPIC_API_KEY".to_string(), api_key.clone());
             }
             if let Some(ref base_url) = settings.anthropic_base_url {
-                options_builder = options_builder.env("ANTHROPIC_BASE_URL", base_url.clone());
+                env_vars.insert("ANTHROPIC_BASE_URL".to_string(), base_url.clone());
             }
         }
     }
 
-    let options = options_builder.build();
+    // Build options using struct initialization
+    let options = ClaudeAgentOptions {
+        permission_mode: Some(PermissionMode::BypassPermissions),
+        continue_conversation,
+        resume: resume_session,
+        cwd: cwd_path,
+        system_prompt: system_prompt_option,
+        mcp_servers,
+        model: model_option,
+        env: env_vars,
+        ..Default::default()
+    };
 
-    // Query Claude - let CLI handle conversation history
+    // Query Claude using streaming - let CLI handle conversation history
     log::info!("Querying Claude, has_history: {}", has_history);
-    let stream = query(&content, Some(options))
+    let mut stream = query_stream(&content, Some(options))
         .await
         .map_err(|e| {
             log::error!("Failed to query Claude: {}", e);
             format!("Failed to query Claude: {}", e)
         })?;
-    let mut stream = Box::pin(stream);
 
     let mut assistant_content = String::new();
     let assistant_msg_id = Uuid::new_v4().to_string();
@@ -912,13 +1194,13 @@ async fn send_message(
     while let Some(message) = stream.next().await {
         log::info!("Received message: {:?}", message);
         match message {
-            Ok(ClaudeMessage::Assistant { message, .. }) => {
-                log::info!("Assistant message received with {} content blocks", message.content.len());
-                for block in &message.content {
+            Ok(ClaudeMessage::Assistant(msg)) => {
+                log::info!("Assistant message received with {} content blocks", msg.message.content.len());
+                for block in &msg.message.content {
                     match block {
-                        ContentBlock::Text { text } => {
-                            log::info!("Text block: {}", text);
-                            assistant_content.push_str(text);
+                        ContentBlock::Text(text_block) => {
+                            log::info!("Text block: {}", text_block.text);
+                            assistant_content.push_str(&text_block.text);
                             // Emit text delta event to main window
                             log::info!("Emitting text_delta event for session: {}", session_id);
                             let event_data = SessionEvent {
@@ -935,16 +1217,16 @@ async fn send_message(
                                 let _ = app.emit("session-event", &event_data);
                             }
                         }
-                        ContentBlock::ToolUse { id, name, input } => {
-                            log::info!("Tool use: {} ({}) - input: {:?}", name, id, input);
+                        ContentBlock::ToolUse(tool_use) => {
+                            log::info!("Tool use: {} ({}) - input: {:?}", tool_use.name, tool_use.id, tool_use.input);
                             // Emit tool_use event so UI can show progress
                             let tool_event = SessionEvent {
                                 event_type: "tool_use".to_string(),
                                 session_id: session_id.clone(),
                                 data: serde_json::json!({
-                                    "tool_id": id,
-                                    "tool_name": name,
-                                    "tool_input": input,
+                                    "tool_id": tool_use.id,
+                                    "tool_name": tool_use.name,
+                                    "tool_input": tool_use.input,
                                     "message_id": assistant_msg_id
                                 }),
                             };
@@ -960,8 +1242,8 @@ async fn send_message(
                     }
                 }
             }
-            Ok(ClaudeMessage::Result { total_cost_usd, num_turns, .. }) => {
-                log::info!("Result received: cost={:?}, turns={:?}", total_cost_usd, num_turns);
+            Ok(ClaudeMessage::Result(result)) => {
+                log::info!("Result received: cost={:?}, turns={:?}", result.total_cost_usd, result.num_turns);
                 // Emit complete event to main window
                 let complete_event = SessionEvent {
                     event_type: "complete".to_string(),
@@ -969,8 +1251,8 @@ async fn send_message(
                     data: serde_json::json!({
                         "message_id": assistant_msg_id,
                         "content": assistant_content,  // Include final content
-                        "cost": total_cost_usd,
-                        "turns": num_turns
+                        "cost": result.total_cost_usd,
+                        "turns": result.num_turns
                     }),
                 };
                 if let Some(window) = app.get_webview_window("main") {
@@ -1130,11 +1412,16 @@ pub fn run() {
             skill_delete,
             skill_open_folder,
             skill_search,
+            open_directory,
             // Memory commands
             memory_sync,
             memory_search,
             memory_get_context,
             memory_get_stats,
+            // Workspace file search commands
+            search_workspace_files,
+            read_file_for_mention,
+            fetch_url_for_mention,
             // Memory tool commands
             memory_tool_view,
             memory_tool_create,

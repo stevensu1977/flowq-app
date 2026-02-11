@@ -221,9 +221,9 @@ const McpManager: React.FC = () => {
   }, [servers, loadServers]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 w-full overflow-hidden">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 min-w-0">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium text-gray-900 dark:text-white">MCP Servers</h3>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -328,14 +328,14 @@ const McpManager: React.FC = () => {
             return (
               <div
                 key={server.name}
-                className={`rounded-xl border transition-colors ${
+                className={`rounded-xl border transition-colors overflow-hidden ${
                   isDisabled
                     ? 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 opacity-60'
                     : 'border-green-200 dark:border-green-800 bg-green-50/30 dark:bg-green-900/10'
                 }`}
               >
                 {/* Server Header */}
-                <div className="flex items-center gap-2 px-3 py-2.5">
+                <div className="flex items-center gap-2 px-3 py-2.5 min-w-0">
                   <button
                     onClick={() => setExpandedName(isExpanded ? null : server.name)}
                     className="p-0.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0"
@@ -347,11 +347,13 @@ const McpManager: React.FC = () => {
                   </div>
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-medium text-sm text-gray-900 dark:text-white truncate">
-                        {server.name}
-                      </span>
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <span className="font-medium text-sm text-gray-900 dark:text-white block truncate">
+                          {server.name}
+                        </span>
+                      </div>
                       <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isDisabled ? 'bg-gray-400' : 'bg-green-500'}`} />
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0">
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
                         {server.transport}
                       </span>
                     </div>

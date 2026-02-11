@@ -180,6 +180,51 @@ export async function openPath(path: string): Promise<void> {
   await openShell(path)
 }
 
+/** Open a directory in the system file manager */
+export async function openDirectory(path: string): Promise<void> {
+  return invoke<void>('open_directory', { path })
+}
+
+// ============ Mention APIs (@file, @url) ============
+
+/** File search result for @file mention */
+export interface WorkspaceFile {
+  name: string
+  path: string
+  relative_path: string
+  is_dir: boolean
+  size?: number
+}
+
+/** Search files in workspace directory */
+export async function searchWorkspaceFiles(
+  workspace: string,
+  query: string,
+  maxResults?: number
+): Promise<WorkspaceFile[]> {
+  return invoke<WorkspaceFile[]>('search_workspace_files', {
+    workspace,
+    query,
+    max_results: maxResults,
+  })
+}
+
+/** Read file content for @file mention injection */
+export async function readFileForMention(
+  path: string,
+  maxLines?: number
+): Promise<string> {
+  return invoke<string>('read_file_for_mention', {
+    path,
+    max_lines: maxLines,
+  })
+}
+
+/** Fetch URL content for @url mention */
+export async function fetchUrlForMention(url: string): Promise<string> {
+  return invoke<string>('fetch_url_for_mention', { url })
+}
+
 // ============ Event API (via Tauri) ============
 
 export { listen, emit }
@@ -702,7 +747,10 @@ export type ApiProvider = 'anthropic' | 'bedrock'
 
 export interface ApiSettings {
   provider: ApiProvider
+  // Default model selection (from preset list, only for Anthropic official mode)
+  defaultModel?: string
   // Anthropic settings
+  anthropicMode?: 'official' | 'custom'  // Official API or custom proxy
   anthropicApiKey?: string
   anthropicBaseUrl?: string
   anthropicModel?: string
@@ -719,10 +767,12 @@ const API_SETTINGS_KEY = 'api_settings'
 
 export const DEFAULT_API_SETTINGS: ApiSettings = {
   provider: 'bedrock',
+  defaultModel: 'claude-sonnet-4-5-20250514',
+  anthropicMode: 'official',
   bedrockRegion: 'us-east-1',
   bedrockAuthMethod: 'profile',
   bedrockModel: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
-  anthropicModel: 'claude-sonnet-4-20250514',
+  anthropicModel: 'claude-sonnet-4-5-20250514',
 }
 
 /**

@@ -17,6 +17,9 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
+  Link2,
+  Plug,
+  Globe,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { PermissionMode } from './PermissionModeSelector';
@@ -44,11 +47,10 @@ const AWS_REGIONS = [
   { value: 'ap-southeast-1', label: 'Asia Pacific (Singapore)' },
 ];
 
-export type SettingsTab = 'general' | 'apis' | 'mcp' | 'skills' | 'permissions' | 'appearance' | 'shortcuts';
+export type SettingsTab = 'preferences' | 'providers' | 'integrations' | 'mcp' | 'skills' | 'permissions' | 'appearance' | 'shortcuts';
 
 interface SettingsState {
   permissionMode: PermissionMode;
-  defaultModel: string;
   autoSave: boolean;
   showLineNumbers: boolean;
   confirmDelete: boolean;
@@ -56,7 +58,6 @@ interface SettingsState {
 
 const DEFAULT_SETTINGS: SettingsState = {
   permissionMode: 'ask',
-  defaultModel: DEFAULT_MODELS[0].id,
   autoSave: true,
   showLineNumbers: true,
   confirmDelete: true,
@@ -69,9 +70,10 @@ const STORAGE_KEYS = {
 
 // Settings sections
 const TABS: { id: SettingsTab; label: string; icon: typeof Settings }[] = [
-  { id: 'general', label: 'General', icon: Settings },
-  { id: 'apis', label: 'API Keys', icon: Key },
-  { id: 'mcp', label: 'MCP Servers', icon: Server },
+  { id: 'preferences', label: 'Preferences', icon: Settings },
+  { id: 'providers', label: 'AI Provider', icon: Cpu },
+  { id: 'integrations', label: 'Integrations', icon: Link2 },
+  { id: 'mcp', label: 'MCP Servers', icon: Plug },
   { id: 'skills', label: 'Skills', icon: Zap },
   { id: 'permissions', label: 'Permissions', icon: Shield },
   { id: 'appearance', label: 'Appearance', icon: Palette },
@@ -104,7 +106,7 @@ const SHORTCUTS = [
 ];
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab, apiSettings, onSaveApiSettings }) => {
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'general');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'preferences');
 
   // Update active tab when initialTab changes
   useEffect(() => {
@@ -161,7 +163,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end p-4">
       {/* Backdrop with blur */}
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-overlay transition-opacity"
@@ -169,7 +171,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
       />
 
       {/* Slide-over Panel */}
-      <div className="relative w-full max-w-2xl h-full bg-card shadow-2xl border-l border-border flex overflow-hidden slide-in-right">
+      <div className="relative w-full max-w-3xl h-full bg-card shadow-2xl border border-border rounded-2xl flex overflow-hidden slide-in-right">
         {/* Sidebar */}
         <div className="w-52 border-r border-border bg-muted/50 p-4 paper-texture">
           <div className="flex items-center gap-3 mb-6 relative z-10">
@@ -219,47 +221,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
           </div>
 
           {/* Content area */}
-          <div className="flex-1 overflow-y-auto p-6">
-            {/* General Settings */}
-            {activeTab === 'general' && (
+          <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 min-w-0">
+            {/* Preferences Settings */}
+            {activeTab === 'preferences' && (
               <div className="space-y-6">
-                {/* Default Model */}
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-                    <Cpu size={16} className="text-muted-foreground" />
-                    Default Model
-                  </label>
-                  <div className="space-y-2">
-                    {DEFAULT_MODELS.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => updateSettings({ defaultModel: model.id })}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${
-                          settings.defaultModel === model.id
-                            ? 'border-accent bg-accent/10'
-                            : 'border-border hover:bg-muted'
-                        }`}
-                      >
-                        <div className="flex-1 text-left">
-                          <div className="text-sm font-medium text-foreground">
-                            {model.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {model.description}
-                          </div>
-                        </div>
-                        {settings.defaultModel === model.id && (
-                          <Check size={16} className="text-accent" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Toggles */}
+                {/* Behavior Toggles */}
                 <div className="space-y-3">
                   <label className="text-sm font-medium text-foreground">
-                    Preferences
+                    Behavior
                   </label>
                   <div className="space-y-2">
                     <ToggleItem
@@ -285,8 +254,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
               </div>
             )}
 
-            {/* API Keys Settings */}
-            {activeTab === 'apis' && (
+            {/* Model Providers Settings */}
+            {activeTab === 'providers' && (
               <div className="space-y-6">
                 {/* Provider Selection */}
                 <div>
@@ -331,7 +300,70 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
 
                 {/* Anthropic Settings */}
                 {localApiSettings.provider === 'anthropic' && (
-                  <div className="space-y-4">
+                  <div className="space-y-4 pt-4 border-t border-border">
+                    {/* Official / Custom Mode Slider Toggle */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        API Mode
+                      </label>
+                      <div
+                        className="relative inline-flex items-center rounded-xl p-1 bg-muted border border-border cursor-pointer"
+                        onClick={() => setLocalApiSettings(prev => ({
+                          ...prev,
+                          anthropicMode: prev.anthropicMode === 'custom' ? 'official' : 'custom'
+                        }))}
+                        role="switch"
+                        aria-checked={localApiSettings.anthropicMode === 'custom'}
+                      >
+                        {/* Sliding indicator */}
+                        <div
+                          className={`absolute top-1 h-[calc(100%-8px)] w-[calc(50%-4px)] rounded-lg bg-card shadow-sm border border-border/50 transition-all duration-200 ease-out ${
+                            localApiSettings.anthropicMode !== 'custom' ? 'left-1' : 'left-[calc(50%+2px)]'
+                          }`}
+                        />
+
+                        {/* Official option */}
+                        <button
+                          type="button"
+                          className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ${
+                            localApiSettings.anthropicMode !== 'custom'
+                              ? 'text-purple-600 dark:text-purple-400'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocalApiSettings(prev => ({ ...prev, anthropicMode: 'official' }));
+                          }}
+                        >
+                          <Globe size={14} />
+                          <span>Official</span>
+                        </button>
+
+                        {/* Custom option */}
+                        <button
+                          type="button"
+                          className={`relative z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors duration-200 ${
+                            localApiSettings.anthropicMode === 'custom'
+                              ? 'text-purple-600 dark:text-purple-400'
+                              : 'text-muted-foreground hover:text-foreground'
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLocalApiSettings(prev => ({ ...prev, anthropicMode: 'custom' }));
+                          }}
+                        >
+                          <Plug size={14} />
+                          <span>Custom</span>
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {localApiSettings.anthropicMode !== 'custom'
+                          ? 'Using official api.anthropic.com'
+                          : 'Using your own proxy endpoint'}
+                      </p>
+                    </div>
+
+                    {/* API Key - Always shown */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         API Key
@@ -353,33 +385,64 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                         </button>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Base URL <span className="text-gray-400 font-normal">(optional)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={localApiSettings.anthropicBaseUrl || ''}
-                        onChange={(e) => setLocalApiSettings(prev => ({ ...prev, anthropicBaseUrl: e.target.value }))}
-                        placeholder="https://api.anthropic.com"
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
-                      />
-                      <p className="text-xs text-gray-400 mt-1.5">
-                        Leave empty for official API, or enter your proxy URL
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Model <span className="text-gray-400 font-normal">(optional)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={localApiSettings.anthropicModel || ''}
-                        onChange={(e) => setLocalApiSettings(prev => ({ ...prev, anthropicModel: e.target.value }))}
-                        placeholder="claude-sonnet-4-20250514"
-                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
-                      />
-                    </div>
+
+                    {/* Custom Mode: Base URL and Model */}
+                    {localApiSettings.anthropicMode === 'custom' && (
+                      <>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Base URL
+                          </label>
+                          <input
+                            type="text"
+                            value={localApiSettings.anthropicBaseUrl || ''}
+                            onChange={(e) => setLocalApiSettings(prev => ({ ...prev, anthropicBaseUrl: e.target.value }))}
+                            placeholder="https://your-proxy.example.com"
+                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Model ID
+                          </label>
+                          <input
+                            type="text"
+                            value={localApiSettings.anthropicModel || ''}
+                            onChange={(e) => setLocalApiSettings(prev => ({ ...prev, anthropicModel: e.target.value }))}
+                            placeholder="claude-sonnet-4-5-20250514"
+                            className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* Default Model Selection - Only for Official Mode */}
+                    {localApiSettings.anthropicMode !== 'custom' && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Default Model
+                        </label>
+                        <select
+                          value={localApiSettings.defaultModel || DEFAULT_MODELS[0].id}
+                          onChange={(e) => setLocalApiSettings(prev => ({ ...prev, defaultModel: e.target.value }))}
+                          className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 text-foreground appearance-none cursor-pointer"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 12px center',
+                          }}
+                        >
+                          {DEFAULT_MODELS.map((model) => (
+                            <option key={model.id} value={model.id}>
+                              {model.name} {model.id === DEFAULT_MODELS[0].id ? '(Recommended)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {DEFAULT_MODELS.find(m => m.id === localApiSettings.defaultModel)?.description || DEFAULT_MODELS[0].description}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -538,6 +601,94 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                   >
                     Save API Settings
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Integrations Settings */}
+            {activeTab === 'integrations' && (
+              <div className="space-y-6">
+                {/* Local Note Apps Section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">💻</span>
+                    <h4 className="text-sm font-semibold text-foreground">Local Note Apps</h4>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded">
+                      100% Private
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Connect local note-taking apps. Data stays on your machine.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { name: 'Obsidian', icon: '💎', description: 'Markdown vault', color: 'purple' },
+                      { name: 'Craft', icon: '📝', description: 'Rich documents', color: 'blue' },
+                      { name: 'Logseq', icon: '🌳', description: 'Outliner & PKM', color: 'green' },
+                      { name: 'Bear', icon: '🐻', description: 'Markdown notes', color: 'red' },
+                    ].map((app) => (
+                      <button
+                        key={app.name}
+                        className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent/30 hover:bg-accent/5 transition-all text-left group"
+                      >
+                        <div className={`w-9 h-9 rounded-lg bg-${app.color}-100 dark:bg-${app.color}-900/30 flex items-center justify-center`}>
+                          <span className="text-lg">{app.icon}</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-foreground">{app.name}</div>
+                          <div className="text-xs text-muted-foreground">{app.description}</div>
+                        </div>
+                        <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                          Connect →
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-border" />
+
+                {/* Cloud Integrations Section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">☁️</span>
+                    <h4 className="text-sm font-semibold text-foreground">Cloud Integrations</h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Connect cloud services via OAuth. Requires authentication.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { name: 'Notion', icon: '📄', description: 'Wikis & databases' },
+                      { name: 'GitHub', icon: '🐙', description: 'Repos & issues' },
+                      { name: 'Google Drive', icon: '📁', description: 'Docs & files' },
+                      { name: 'Linear', icon: '📊', description: 'Issue tracking' },
+                      { name: 'Slack', icon: '💬', description: 'Team messages' },
+                      { name: 'Jira', icon: '🎯', description: 'Project tracking' },
+                    ].map((integration) => (
+                      <button
+                        key={integration.name}
+                        className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent/30 hover:bg-accent/5 transition-all text-left group"
+                      >
+                        <span className="text-xl">{integration.icon}</span>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium text-foreground">{integration.name}</div>
+                          <div className="text-xs text-muted-foreground">{integration.description}</div>
+                        </div>
+                        <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                          Connect →
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Info Box */}
+                <div className="p-4 bg-accent/5 rounded-xl border border-accent/20">
+                  <p className="text-xs text-muted-foreground">
+                    <strong className="text-foreground">Privacy Note:</strong> Local note apps access files directly on your machine—no data leaves your computer. Cloud integrations use OAuth and only fetch data when requested.
+                  </p>
                 </div>
               </div>
             )}

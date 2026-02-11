@@ -40,6 +40,87 @@ Polish existing features and complete partial implementations.
 
 > **Note:** MCP servers are managed by Claude Code CLI in Agent mode. FlowQ provides configuration UI (`~/.claude.json`), while the CLI handles server lifecycle and tool discovery.
 
+### Slash Commands (`/`) — Implementation Suggestions
+
+**Built-in Commands:**
+
+| Command | Action | Notes |
+|---------|--------|-------|
+| `/settings` | Open settings panel | Optional: `/settings providers` to open specific tab |
+| `/clear` | Clear current session messages | Keep session metadata, only clear chat history |
+| `/history` | Show session history panel | Jump to ChatList or open search |
+| `/new` | Create new session | Same as Cmd+N |
+| `/help` | Show available commands | Display command palette with descriptions |
+| `/model <name>` | Switch model | e.g., `/model claude-3-opus` |
+| `/mode <chat\|agent>` | Switch between Chat/Agent mode | Quick mode toggle |
+| `/export` | Export current session | Trigger export dialog |
+
+**Custom Skills Execution:**
+
+Skills from `~/.claude/skills/` should be invokable as `/skill-name`. For example:
+- `/commit` → Load `~/.claude/skills/commit/SKILL.md` and execute
+- `/review-pr` → Load `~/.claude/skills/review-pr/SKILL.md` and execute
+
+**Implementation Approach:**
+
+1. **Command Registry** — Central registry mapping command names to handlers
+2. **Autocomplete** — Show matching commands as user types `/`
+3. **Parameter Parsing** — Support commands with arguments: `/model claude-3-opus`
+4. **Skill Loading** — When command matches a skill name, inject SKILL.md into system prompt and send the user's message
+
+### Mentions (`@`) — Implementation Suggestions
+
+**Built-in Mention Types:**
+
+| Mention | Description | Example |
+|---------|-------------|---------|
+| `@claude` | Use Anthropic Claude | Route to configured Anthropic API |
+| `@bedrock` | Use AWS Bedrock Claude | Route to configured Bedrock endpoint |
+| `@gpt` | Use OpenAI GPT | Route to configured OpenAI API |
+| `@file:path` | Include file content | `@file:src/main.rs` injects file |
+| `@folder:path` | Include folder structure | `@folder:src/` lists directory tree |
+| `@url:link` | Fetch and include URL content | `@url:https://...` fetches page |
+| `@skill:name` | Invoke skill context | `@skill:commit` loads skill prompt |
+
+**Model Routing Architecture:**
+
+```
+User Input: "@claude Explain this code @file:main.rs"
+                ↓
+         Parse Mentions
+                ↓
+    ┌───────────────────────┐
+    │ Model: claude         │
+    │ Files: [main.rs]      │
+    │ Message: "Explain..." │
+    └───────────────────────┘
+                ↓
+      Route to Anthropic API
+```
+
+**Multi-Model Scenarios:**
+
+1. **Single mention** — Route entire message to that model
+2. **No mention** — Use session's default model
+3. **Mixed mentions** — Primary model processes, others as context
+4. **Comparison mode** — `@claude vs @gpt: Which approach is better?` → Send to both, show side-by-side
+
+**Implementation Approach:**
+
+1. **Mention Parser** — Regex-based extraction: `@(\w+)(?::([^\s]+))?`
+2. **Type Detection** — Determine if mention is model, file, or skill
+3. **Context Injection** — Files/skills become part of message context
+4. **Router** — Based on detected model, select API endpoint
+5. **Fallback** — If mentioned model not configured, show warning
+
+**UI/UX Considerations:**
+
+- **Autocomplete popup** — Show suggestions after `@` keystroke
+- **Syntax highlighting** — Color mentions differently in input
+- **Preview badges** — Show resolved mentions as chips/badges
+- **File picker** — `@file:` triggers file browser
+- **Validation** — Check file exists, model configured before send
+
 ---
 
 ## v0.3 — Flow Enhancement

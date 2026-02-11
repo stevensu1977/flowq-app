@@ -25,7 +25,7 @@ import { ChatSession, ChatMessage, Step, SessionStatus, SESSION_STATUS_CONFIG, T
 import AgentSteps from './AgentSteps';
 import ArchitectureDiagram from './ArchitectureDiagram';
 import MarkdownContent from './MarkdownContent';
-import { sendMessage, createSession, chatSend, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS } from '../lib/tauri-api';
+import { sendMessage, createSession, chatSend, searchWorkspaceFiles, readFileForMention, fetchUrlForMention, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS, type WorkspaceFile } from '../lib/tauri-api';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { DocumentMarkdownOverlay } from './overlay/DocumentMarkdownOverlay';
 import EscapeInterruptOverlay from './EscapeInterruptOverlay';
@@ -169,6 +169,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
     position: { top: number; left: number };
   }>({ isVisible: false, query: '', startIndex: 0, position: { top: 0, left: 0 } });
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
+  const [isMentionLoading, setIsMentionLoading] = useState(false);
+  const mentionSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [slashCommandState, setSlashCommandState] = useState<{
     isVisible: boolean;
     query: string;
@@ -340,7 +342,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
           // Calculate position for dropdown
           const textarea = textareaRef.current;
           if (textarea) {
-            const rect = textarea.getBoundingClientRect();
             setMentionState({
               isVisible: true,
               query,
@@ -348,21 +349,98 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
               position: { top: 60, left: 0 }, // Position above textarea
             });
 
-            // Generate sample suggestions (in real app, this would search the workspace)
-            const sampleItems: MentionItem[] = [
-              { id: '1', type: 'file', name: 'package.json', path: './package.json' },
-              { id: '2', type: 'file', name: 'tsconfig.json', path: './tsconfig.json' },
-              { id: '3', type: 'file', name: 'index.tsx', path: './index.tsx' },
-              { id: '4', type: 'folder', name: 'components', path: './components' },
-              { id: '5', type: 'folder', name: 'lib', path: './lib' },
-              { id: '6', type: 'symbol', name: 'ChatWindow', description: 'React Component' },
-              { id: '7', type: 'symbol', name: 'sendMessage', description: 'Function' },
-            ].filter(item =>
-              item.name.toLowerCase().includes(query.toLowerCase()) ||
-              item.path?.toLowerCase().includes(query.toLowerCase())
-            );
+            // Clear previous search timeout
+            if (mentionSearchTimeoutRef.current) {
+              clearTimeout(mentionSearchTimeoutRef.current);
+            }
 
-            setMentionItems(sampleItems.slice(0, 8));
+            // Show type suggestions when query is empty or very short
+            if (query === '' || (!query.startsWith('file:') && !query.startsWith('url:') && query.length < 2)) {
+              const typeHints: MentionItem[] = [
+                {
+                  id: 'type-file',
+                  type: 'file',
+                  name: 'file:',
+                  description: 'Search and include file content',
+                },
+                {
+                  id: 'type-url',
+                  type: 'url',
+                  name: 'url:',
+                  description: 'Fetch and include URL content',
+                },
+              ];
+              // Filter by query if user started typing
+              const filteredHints = query
+                ? typeHints.filter(h => h.name.startsWith(query))
+                : typeHints;
+              setMentionItems(filteredHints.length > 0 ? filteredHints : typeHints);
+              setIsMentionLoading(false);
+              return;
+            }
+
+            // Check for @url: prefix - show URL input hint
+            if (query.startsWith('url:')) {
+              const urlQuery = query.slice(4);
+              setMentionItems([{
+                id: 'url-hint',
+                type: 'url',
+                name: urlQuery || 'Enter URL...',
+                description: urlQuery ? 'Press Enter to add this URL' : 'Type a URL to fetch content',
+                fullPath: urlQuery.startsWith('http') ? urlQuery : (urlQuery ? `https://${urlQuery}` : ''),
+              }]);
+              setIsMentionLoading(false);
+              return;
+            }
+
+            // Check for @file: prefix - search files
+            const fileQuery = query.startsWith('file:') ? query.slice(5) : query;
+
+            // Search workspace files with debounce
+            setIsMentionLoading(true);
+            mentionSearchTimeoutRef.current = setTimeout(async () => {
+              if (!session.workspacePath) {
+                // No workspace - show placeholder
+                setMentionItems([{
+                  id: 'no-workspace',
+                  type: 'folder',
+                  name: 'No workspace selected',
+                  description: 'Select a workspace to search files',
+                }]);
+                setIsMentionLoading(false);
+                return;
+              }
+
+              try {
+                const files = await searchWorkspaceFiles(session.workspacePath, fileQuery, 10);
+                const items: MentionItem[] = files.map((file, index) => ({
+                  id: `file-${index}`,
+                  type: file.is_dir ? 'folder' : 'file',
+                  name: file.name,
+                  path: file.relative_path,
+                  fullPath: file.path,
+                }));
+
+                // Add URL option if query looks like a URL
+                if (fileQuery.includes('.') && (fileQuery.includes('/') || fileQuery.startsWith('http'))) {
+                  items.push({
+                    id: 'url-option',
+                    type: 'url',
+                    name: `Add URL: ${query}`,
+                    description: 'Fetch content from URL',
+                    fullPath: query.startsWith('http') ? query : `https://${query}`,
+                  });
+                }
+
+                setMentionItems(items);
+              } catch (error) {
+                console.error('Failed to search files:', error);
+                setMentionItems([]);
+              } finally {
+                setIsMentionLoading(false);
+              }
+            }, 150); // 150ms debounce
+
             return;
           }
         }
@@ -373,7 +451,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
     if (mentionState.isVisible) {
       setMentionState(prev => ({ ...prev, isVisible: false }));
     }
-  }, [mentionState.isVisible]);
+  }, [mentionState.isVisible, session.workspacePath]);
 
   // Handle mention selection
   const handleMentionSelect = useCallback((item: MentionItem) => {
@@ -381,7 +459,44 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
     const afterMention = inputValue.slice(
       mentionState.startIndex + mentionState.query.length + 1
     );
-    const mentionText = item.path || item.name;
+
+    // Check if this is a type hint selection (file: or url:)
+    if (item.id === 'type-file' || item.id === 'type-url') {
+      // Insert the type prefix and keep suggestions visible
+      const typePrefix = item.name; // "file:" or "url:"
+      const newValue = `${beforeMention}@${typePrefix}${afterMention}`;
+      setInputValue(newValue);
+
+      // Update mention state to show next level suggestions
+      const newQuery = typePrefix;
+      setMentionState(prev => ({
+        ...prev,
+        query: newQuery,
+      }));
+
+      // Focus and position cursor after the prefix
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const newCursorPos = beforeMention.length + 1 + typePrefix.length;
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+      return;
+    }
+
+    // Determine the mention text format based on type
+    let mentionText: string;
+    if (item.type === 'url') {
+      // For URL, use the full path directly
+      mentionText = `url:${item.fullPath || item.name}`;
+    } else if (item.type === 'file' || item.type === 'folder') {
+      // Use full path for content injection
+      mentionText = `file:${item.fullPath || item.path || item.name}`;
+    } else {
+      mentionText = item.path || item.name;
+    }
+
     const newValue = `${beforeMention}@${mentionText} ${afterMention}`;
 
     setInputValue(newValue);
@@ -778,6 +893,63 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
     };
   }, [session.id, session.title, handleEvent]);
 
+  // Parse @file: and @url: mentions and inject their content
+  const parseMentionsAndInjectContent = async (text: string): Promise<string> => {
+    // Regex to match @file:path and @url:url mentions
+    const mentionRegex = /@(file|url):([^\s]+)/g;
+    const mentions: { match: string; type: 'file' | 'url'; path: string }[] = [];
+
+    let match;
+    while ((match = mentionRegex.exec(text)) !== null) {
+      mentions.push({
+        match: match[0],
+        type: match[1] as 'file' | 'url',
+        path: match[2],
+      });
+    }
+
+    if (mentions.length === 0) {
+      return text;
+    }
+
+    // Fetch content for each mention
+    const contentMap = new Map<string, string>();
+    for (const mention of mentions) {
+      try {
+        let content: string;
+        if (mention.type === 'file') {
+          content = await readFileForMention(mention.path, 500); // Limit to 500 lines
+          contentMap.set(mention.match, `\n\n📄 **File: ${mention.path}**\n\`\`\`\n${content}\n\`\`\`\n`);
+        } else if (mention.type === 'url') {
+          content = await fetchUrlForMention(mention.path);
+          // Truncate URL content if too long
+          const truncatedContent = content.length > 10000
+            ? content.slice(0, 10000) + '\n\n... (content truncated)'
+            : content;
+          contentMap.set(mention.match, `\n\n🔗 **URL: ${mention.path}**\n\`\`\`\n${truncatedContent}\n\`\`\`\n`);
+        }
+      } catch (error) {
+        console.error(`Failed to fetch content for ${mention.match}:`, error);
+        contentMap.set(mention.match, `\n\n⚠️ **Failed to load: ${mention.path}**\nError: ${error}\n`);
+      }
+    }
+
+    // Build the augmented message
+    let augmentedText = text;
+
+    // Remove the mention markers from the text and add content at the end
+    for (const mention of mentions) {
+      augmentedText = augmentedText.replace(mention.match, '');
+    }
+
+    // Append all fetched content
+    for (const [, content] of contentMap) {
+      augmentedText += content;
+    }
+
+    return augmentedText.trim();
+  };
+
   const handleSend = async () => {
     // For agent mode, require backend session; for chat mode, no backend session needed
     if (chatMode === 'agent') {
@@ -792,6 +964,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
 
   // Agent mode: Use Claude Code SDK with tools
   const handleSendAgent = async (currentBackendSessionId: string) => {
+    // Store original input for display (without injected content)
+    const displayContent = inputValue;
+
     // Build message content with attachments
     let messageContent = inputValue;
     if (attachments.length > 0) {
@@ -804,10 +979,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
       messageContent = inputValue + attachmentText;
     }
 
+    // Parse @file: and @url: mentions and inject their content
+    try {
+      messageContent = await parseMentionsAndInjectContent(messageContent);
+    } catch (error) {
+      console.error('Failed to parse mentions:', error);
+    }
+
     const userMessage: ChatMessage = {
       id: Math.random().toString(36).substr(2, 9),
       role: 'user',
-      content: inputValue, // Display only the text, not the file content
+      content: displayContent, // Display only the text, not the injected content
       timestamp: new Date(),
     };
 
@@ -1218,7 +1400,26 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
            </div>
 
            {/* Input Box */}
-           <div className="bg-card border border-border rounded-2xl shadow-sm transition-all overflow-hidden">
+           <div className="relative bg-card border border-border rounded-2xl shadow-sm transition-all">
+              {/* Mention suggestions dropdown - positioned outside overflow container */}
+              <MentionSuggestions
+                query={mentionState.query}
+                isVisible={mentionState.isVisible}
+                position={mentionState.position}
+                items={mentionItems}
+                onSelect={handleMentionSelect}
+                onClose={() => setMentionState(prev => ({ ...prev, isVisible: false }))}
+                isLoading={isMentionLoading}
+              />
+
+              {/* Slash commands dropdown */}
+              <SlashCommands
+                query={slashCommandState.query}
+                isVisible={slashCommandState.isVisible}
+                position={{ top: 60, left: 0 }}
+                onSelect={handleSlashCommandSelect}
+                onClose={() => setSlashCommandState({ isVisible: false, query: '' })}
+              />
               {/* Attachments display */}
               <div className="p-3 pb-0">
                 <Attachments
@@ -1265,24 +1466,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                   style={{ minHeight: '60px', maxHeight: '200px' }}
                 />
 
-                {/* Mention suggestions dropdown */}
-                <MentionSuggestions
-                  query={mentionState.query}
-                  isVisible={mentionState.isVisible}
-                  position={mentionState.position}
-                  items={mentionItems}
-                  onSelect={handleMentionSelect}
-                  onClose={() => setMentionState(prev => ({ ...prev, isVisible: false }))}
-                />
-
-                {/* Slash commands dropdown */}
-                <SlashCommands
-                  query={slashCommandState.query}
-                  isVisible={slashCommandState.isVisible}
-                  position={{ top: 60, left: 0 }}
-                  onSelect={handleSlashCommandSelect}
-                  onClose={() => setSlashCommandState({ isVisible: false, query: '' })}
-                />
               </div>
 
               {/* Action bar with visible affordances */}
@@ -1366,7 +1549,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
              </span>
              <span>•</span>
              <button
-               onClick={() => onOpenSettings?.('apis')}
+               onClick={() => onOpenSettings?.('providers')}
                className="font-mono hover:text-foreground transition-colors truncate max-w-[200px]"
                title={`Model: ${currentModel} (click to configure)`}
              >

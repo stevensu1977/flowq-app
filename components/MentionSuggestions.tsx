@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { File, Folder, FileCode, Hash, User, Search } from 'lucide-react';
+import { File, Folder, FileCode, Hash, User, Search, Globe, Link2 } from 'lucide-react';
 
 export interface MentionItem {
   id: string;
-  type: 'file' | 'folder' | 'symbol' | 'user' | 'command';
+  type: 'file' | 'folder' | 'symbol' | 'user' | 'command' | 'url';
   name: string;
   path?: string;
   description?: string;
+  /** Full file path for content injection */
+  fullPath?: string;
 }
 
 interface MentionSuggestionsProps {
@@ -27,6 +29,7 @@ function getMentionIcon(type: MentionItem['type']) {
     symbol: <Hash size={14} className="text-purple-500" />,
     user: <User size={14} className="text-green-500" />,
     command: <span className="text-xs font-mono text-gray-500">/</span>,
+    url: <Globe size={14} className="text-cyan-500" />,
   };
   return iconMap[type] || <File size={14} className="text-gray-400" />;
 }
@@ -94,8 +97,7 @@ const MentionSuggestions: React.FC<MentionSuggestionsProps> = ({
 
   return (
     <div
-      className="absolute z-50 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[280px] max-w-[400px] animate-fade-in"
-      style={{ bottom: position.top, left: position.left }}
+      className="absolute z-50 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[280px] max-w-[400px] animate-fade-in bottom-full mb-2 left-3"
     >
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">

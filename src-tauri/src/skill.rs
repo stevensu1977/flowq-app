@@ -101,15 +101,20 @@ pub type Result<T> = std::result::Result<T, SkillError>;
 pub struct SkillManager;
 
 impl SkillManager {
-    /// Get the skills directory path
-    fn skills_dir() -> Result<PathBuf> {
+    /// Get the global skills directory path (~/.claude/skills/)
+    fn global_skills_dir() -> Result<PathBuf> {
         let home = dirs::home_dir().ok_or(SkillError::HomeNotFound)?;
         Ok(home.join(".claude").join("skills"))
     }
 
-    /// Ensure skills directory exists
+    /// Get the workspace skills directory path ({workspace}/.claude/skills/)
+    fn workspace_skills_dir(workspace_path: &str) -> PathBuf {
+        PathBuf::from(workspace_path).join(".claude").join("skills")
+    }
+
+    /// Ensure global skills directory exists
     fn ensure_skills_dir() -> Result<PathBuf> {
-        let dir = Self::skills_dir()?;
+        let dir = Self::global_skills_dir()?;
         if !dir.exists() {
             fs::create_dir_all(&dir)?;
         }
@@ -128,41 +133,81 @@ impl SkillManager {
         None
     }
 
-    /// List all installed skills
-    pub fn list() -> Result<Vec<SkillInfo>> {
-        let skills_dir = Self::skills_dir()?;
-
+    /// List skills from a single directory
+    fn list_from_dir(skills_dir: &PathBuf) -> Vec<SkillInfo> {
         if !skills_dir.exists() {
-            return Ok(Vec::new());
+            return Vec::new();
         }
 
         let mut skills = Vec::new();
 
-        for entry in fs::read_dir(&skills_dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        if let Ok(entries) = fs::read_dir(skills_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
 
-            if path.is_dir() {
-                let name = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("")
-                    .to_string();
+                if path.is_dir() {
+                    let name = path.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("")
+                        .to_string();
 
-                // Skip hidden directories
-                if name.starts_with('.') {
-                    continue;
+                    // Skip hidden directories
+                    if name.starts_with('.') {
+                        continue;
+                    }
+
+                    // Calculate token count from SKILL.md size
+                    let token_count = Self::find_skill_md(&path)
+                        .and_then(|p| fs::metadata(&p).ok())
+                        .map(|m| m.len() / 4); // Approximate token count
+
+                    skills.push(SkillInfo {
+                        name,
+                        path: path.to_string_lossy().to_string(),
+                        token_count,
+                    });
                 }
+            }
+        }
 
-                // Calculate token count from SKILL.md size
-                let token_count = Self::find_skill_md(&path)
-                    .and_then(|p| fs::metadata(&p).ok())
-                    .map(|m| m.len() / 4); // Approximate token count
+        skills
+    }
 
-                skills.push(SkillInfo {
-                    name,
-                    path: path.to_string_lossy().to_string(),
-                    token_count,
-                });
+    /// List all installed skills from global directory only
+    pub fn list() -> Result<Vec<SkillInfo>> {
+        let skills_dir = Self::global_skills_dir()?;
+        let mut skills = Self::list_from_dir(&skills_dir);
+        skills.sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(skills)
+    }
+
+    /// List all installed skills from both global and workspace directories
+    /// Skills are loaded from:
+    /// 1. ~/.claude/skills/ (global)
+    /// 2. {workspace}/.claude/skills/ (workspace-specific)
+    pub fn list_all(workspace_path: Option<&str>) -> Result<Vec<SkillInfo>> {
+        let mut skills = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
+
+        // Load from global directory first
+        if let Ok(global_dir) = Self::global_skills_dir() {
+            for skill in Self::list_from_dir(&global_dir) {
+                if seen_names.insert(skill.name.clone()) {
+                    skills.push(skill);
+                }
+            }
+        }
+
+        // Load from workspace directory (workspace skills override global ones with same name)
+        if let Some(ws_path) = workspace_path {
+            let ws_dir = Self::workspace_skills_dir(ws_path);
+            for skill in Self::list_from_dir(&ws_dir) {
+                // Remove global skill if workspace has one with same name
+                if seen_names.contains(&skill.name) {
+                    skills.retain(|s| s.name != skill.name);
+                }
+                seen_names.insert(skill.name.clone());
+                skills.push(skill);
             }
         }
 
@@ -170,9 +215,9 @@ impl SkillManager {
         Ok(skills)
     }
 
-    /// Get skill content (SKILL.md)
+    /// Get skill content (SKILL.md) from global directory
     pub fn get_content(name: &str) -> Result<String> {
-        let skills_dir = Self::skills_dir()?;
+        let skills_dir = Self::global_skills_dir()?;
         let skill_dir = skills_dir.join(name);
 
         if !skill_dir.exists() {
@@ -185,9 +230,23 @@ impl SkillManager {
         Ok(fs::read_to_string(skill_md)?)
     }
 
+    /// Get skill content (SKILL.md) from a specific path
+    pub fn get_content_from_path(skill_path: &str) -> Result<String> {
+        let skill_dir = PathBuf::from(skill_path);
+
+        if !skill_dir.exists() {
+            return Err(SkillError::SkillNotFound(skill_path.to_string()));
+        }
+
+        let skill_md = Self::find_skill_md(&skill_dir)
+            .ok_or_else(|| SkillError::SkillMdNotFound(skill_path.to_string()))?;
+
+        Ok(fs::read_to_string(skill_md)?)
+    }
+
     /// Get skill metadata
     pub fn get_metadata(name: &str) -> Result<Option<SkillMetadata>> {
-        let skills_dir = Self::skills_dir()?;
+        let skills_dir = Self::global_skills_dir()?;
         let metadata_path = skills_dir.join(name).join(".metadata.json");
 
         if !metadata_path.exists() {
@@ -201,7 +260,7 @@ impl SkillManager {
 
     /// List files in a skill directory
     pub fn list_files(name: &str, subpath: Option<&str>) -> Result<Vec<FileItem>> {
-        let skills_dir = Self::skills_dir()?;
+        let skills_dir = Self::global_skills_dir()?;
         let mut target_dir = skills_dir.join(name);
 
         if let Some(sub) = subpath {
@@ -263,7 +322,7 @@ impl SkillManager {
 
     /// Read a file from a skill
     pub fn read_file(name: &str, file_path: &str) -> Result<String> {
-        let skills_dir = Self::skills_dir()?;
+        let skills_dir = Self::global_skills_dir()?;
         let skill_dir = skills_dir.join(name);
         let full_path = skill_dir.join(file_path);
 
@@ -574,7 +633,7 @@ impl SkillManager {
 
     /// Delete a skill
     pub fn delete(name: &str) -> Result<()> {
-        let skills_dir = Self::skills_dir()?;
+        let skills_dir = Self::global_skills_dir()?;
         let skill_dir = skills_dir.join(name);
 
         if skill_dir.exists() {
@@ -586,7 +645,7 @@ impl SkillManager {
 
     /// Open skill folder in file manager
     pub fn open_folder(name: &str) -> Result<()> {
-        let skills_dir = Self::skills_dir()?;
+        let skills_dir = Self::global_skills_dir()?;
         let skill_dir = skills_dir.join(name);
 
         if !skill_dir.exists() {

@@ -197,8 +197,7 @@ const SlashCommands: React.FC<SlashCommandsProps> = ({
 
   return (
     <div
-      className="absolute z-50 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[300px] max-w-[400px] animate-fade-in"
-      style={{ bottom: position.top, left: position.left }}
+      className="absolute z-50 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[300px] max-w-[400px] animate-fade-in bottom-full mb-2 left-3"
     >
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">

@@ -16,6 +16,7 @@ import {
   setCurrentWorkspace,
   removeWorkspace,
   openDirectoryDialog,
+  openDirectory,
   setWorkspaceBackend,
   getApiSettings,
   saveApiSettings,
@@ -39,7 +40,7 @@ const App: React.FC = () => {
   const [filter, setFilter] = useState<ChatFilter>('all');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('preferences');
   const [isShortcutsHelpOpen, setIsShortcutsHelpOpen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [apiSettings, setApiSettings] = useState<ApiSettings>(DEFAULT_API_SETTINGS);
@@ -366,6 +367,7 @@ const App: React.FC = () => {
             onSelectWorkspace={handleSelectWorkspace}
             onOpenWorkspace={handleOpenWorkspace}
             onRemoveWorkspace={handleRemoveWorkspace}
+            onOpenDirectory={openDirectory}
             filter={filter}
             onFilterChange={setFilter}
             sessions={sessions}

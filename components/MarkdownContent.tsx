@@ -8,6 +8,24 @@ import MermaidDiagram from './MermaidDiagram';
 import DiffBlock from './DiffBlock';
 import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 
+// remark-math options - only parse $$ blocks, not single $ for inline math
+// This prevents currency amounts like $100 from being interpreted as math
+const remarkMathOptions = {
+  singleDollarTextMath: false,
+};
+
+// KaTeX options for more lenient rendering
+const katexOptions = {
+  // Don't throw on errors, just render the raw text instead
+  throwOnError: false,
+  // Use 'ignore' mode to suppress warnings about Unicode characters
+  strict: 'ignore' as const,
+  // Output both HTML and MathML for accessibility
+  output: 'htmlAndMathml' as const,
+  // Trust HTML in LaTeX (needed for some Unicode characters)
+  trust: true,
+};
+
 interface MarkdownContentProps {
   content: string;
 }
@@ -140,8 +158,8 @@ const MarkdownContent: React.FC<MarkdownContentProps> = ({ content }) => {
   return (
     <div className="prose">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        remarkPlugins={[remarkGfm, [remarkMath, remarkMathOptions]]}
+        rehypePlugins={[[rehypeKatex, katexOptions]]}
         components={{
           // 标题样式 - using display font (Lora)
           h1: ({ children }) => (

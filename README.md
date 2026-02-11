@@ -196,9 +196,14 @@ Prompt template here with {{variables}}
 
 ---
 
-## Roadmap
+## Documentation
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full product roadmap.
+| Document | Description |
+|----------|-------------|
+| [ROADMAP.md](docs/ROADMAP.md) | Product roadmap and feature planning |
+| [INTEGRATION_PLAN.md](docs/INTEGRATION_PLAN.md) | Third-party integrations architecture |
+| [MEMORY_TODO.md](docs/MEMORY_TODO.md) | Memory system implementation plan |
+| [UI-Enhanced.md](docs/UI-Enhanced.md) | UI/UX enhancement specifications |
 
 ### Coming Soon
 

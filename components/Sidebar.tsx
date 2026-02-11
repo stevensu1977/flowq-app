@@ -6,9 +6,9 @@ import {
   Flag,
   Activity,
   Tag,
-  Database,
-  Cpu,
+  Link2,
   FolderOpen,
+  Plug,
   Zap,
   Settings,
   ChevronDown,
@@ -38,7 +38,7 @@ import { useTheme } from '../context/ThemeContext';
 export type ChatFilter = 'all' | 'flagged' | SessionStatus | `label:${string}`;
 
 /** Settings tab types */
-export type SettingsTab = 'general' | 'apis' | 'mcp' | 'skills' | 'permissions' | 'appearance' | 'shortcuts';
+export type SettingsTab = 'preferences' | 'providers' | 'integrations' | 'mcp' | 'skills' | 'permissions' | 'appearance' | 'shortcuts';
 
 interface SidebarProps {
   onNewChat: () => void;
@@ -47,6 +47,8 @@ interface SidebarProps {
   onSelectWorkspace: (workspace: Workspace) => void;
   onOpenWorkspace: () => void;
   onRemoveWorkspace: (path: string) => void;
+  /** Callback to open current workspace in file manager */
+  onOpenDirectory?: (path: string) => void;
   /** Current filter */
   filter?: ChatFilter;
   /** Callback when filter changes */
@@ -64,6 +66,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onSelectWorkspace,
   onOpenWorkspace,
   onRemoveWorkspace,
+  onOpenDirectory,
   filter = 'all',
   onFilterChange,
   sessions = [],
@@ -296,23 +299,30 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
+      {/* SOURCES - Data integrations */}
       <div className="space-y-1 relative z-10">
         <h3 className="sidebar-animate px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Sources</h3>
         <div className="sidebar-animate">
-          <NavItem icon={Database} label="APIs" onClick={() => onOpenSettings?.('apis')} />
-        </div>
-        <div className="sidebar-animate">
-          <NavItem icon={Cpu} label="MCPs" onClick={() => onOpenSettings?.('mcp')} />
+          <NavItem icon={Link2} label="Integrations" onClick={() => onOpenSettings?.('integrations')} />
         </div>
         <div className="sidebar-animate">
           <NavItem icon={FolderOpen} label="Local Folders" />
         </div>
       </div>
 
+      {/* TOOLS - AI capabilities */}
       <div className="space-y-1 relative z-10">
+        <h3 className="sidebar-animate px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Tools</h3>
+        <div className="sidebar-animate">
+          <NavItem icon={Plug} label="MCP Servers" onClick={() => onOpenSettings?.('mcp')} />
+        </div>
         <div className="sidebar-animate">
           <NavItem icon={Zap} label="Skills" onClick={() => onOpenSettings?.('skills')} />
         </div>
+      </div>
+
+      {/* Settings & Theme */}
+      <div className="space-y-1 relative z-10">
         <div className="sidebar-animate">
           <NavItem icon={Settings} label="Settings" onClick={() => onOpenSettings?.()} />
         </div>
@@ -332,22 +342,34 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Workspace Selector */}
       <div className="mt-auto pt-4 border-t border-border relative" ref={menuRef}>
-        <button
-          onClick={() => setIsWorkspaceMenuOpen(!isWorkspaceMenuOpen)}
-          className="w-full flex items-center justify-between px-2 py-2 rounded-lg hover:bg-muted transition-colors"
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold text-xs flex-shrink-0">
-              {initials}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsWorkspaceMenuOpen(!isWorkspaceMenuOpen)}
+            className="flex-1 flex items-center justify-between px-2 py-2 rounded-lg hover:bg-muted transition-colors min-w-0"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold text-xs flex-shrink-0">
+                {initials}
+              </div>
+              <span className="text-sm font-semibold text-foreground truncate">{displayName}</span>
+              <div className="w-2 h-2 rounded-full bg-success flex-shrink-0"></div>
             </div>
-            <span className="text-sm font-semibold text-foreground truncate">{displayName}</span>
-            <div className="w-2 h-2 rounded-full bg-success flex-shrink-0"></div>
-          </div>
-          <ChevronDown
-            size={16}
-            className={`text-muted-foreground transition-transform flex-shrink-0 ${isWorkspaceMenuOpen ? 'rotate-180' : ''}`}
-          />
-        </button>
+            <ChevronDown
+              size={16}
+              className={`text-muted-foreground transition-transform flex-shrink-0 ${isWorkspaceMenuOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {/* Open in Finder button */}
+          {currentWorkspace && onOpenDirectory && (
+            <button
+              onClick={() => onOpenDirectory(currentWorkspace.path)}
+              className="p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+              title="Open in Finder"
+            >
+              <FolderOpen size={16} className="text-muted-foreground" />
+            </button>
+          )}
+        </div>
 
         {/* Workspace Dropdown Menu */}
         {isWorkspaceMenuOpen && (

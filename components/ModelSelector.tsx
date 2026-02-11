@@ -18,11 +18,11 @@ interface ModelSelectorProps {
   disabled?: boolean;
 }
 
-// Default Claude models
+// Default Claude models (Official Anthropic API)
 export const DEFAULT_MODELS: ModelOption[] = [
   {
-    id: 'claude-sonnet-4-20250514',
-    name: 'Claude Sonnet 4',
+    id: 'claude-sonnet-4-5-20250514',
+    name: 'Claude Sonnet 4.5',
     description: 'Best balance of speed and capability',
     provider: 'Anthropic',
     contextWindow: '200K',
@@ -30,20 +30,20 @@ export const DEFAULT_MODELS: ModelOption[] = [
     isDefault: true,
   },
   {
-    id: 'claude-opus-4-20250514',
-    name: 'Claude Opus 4',
+    id: 'claude-opus-4-5-20250514',
+    name: 'Claude Opus 4.5',
     description: 'Most capable, best for complex tasks',
     provider: 'Anthropic',
     contextWindow: '200K',
-    speed: 'slow',
+    speed: 'medium',
   },
   {
-    id: 'claude-3-5-haiku-20241022',
-    name: 'Claude 3.5 Haiku',
-    description: 'Fastest responses, great for simple tasks',
+    id: 'claude-opus-4-6-20250514',
+    name: 'Claude Opus 4.6',
+    description: 'Latest and most advanced model',
     provider: 'Anthropic',
     contextWindow: '200K',
-    speed: 'fast',
+    speed: 'slow',
   },
 ];
 
