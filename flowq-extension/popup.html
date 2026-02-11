@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowQ Browser Relay</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 320px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #fafafa;
+      color: #1a1a1a;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: white;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-icon {
+      width: 32px;
+      height: 32px;
+      background: white;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .header-text h1 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      opacity: 0.7;
+      margin-top: 2px;
+    }
+
+    .status-bar {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+
+    .status-dot.connected {
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+    }
+
+    .status-dot.connecting {
+      background: #f59e0b;
+      animation: pulse 1s infinite;
+    }
+
+    .status-text {
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .status-text.connected {
+      color: #22c55e;
+    }
+
+    .status-text.disconnected {
+      color: #6b7280;
+    }
+
+    .btn-reconnect {
+      padding: 6px 12px;
+      font-size: 11px;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-reconnect:hover {
+      background: #e5e7eb;
+    }
+
+    .section {
+      padding: 12px 16px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .tabs-list {
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .tab-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      background: white;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tab-item:hover {
+      border-color: #1a1a1a;
+    }
+
+    .tab-item.attached {
+      border-color: #22c55e;
+      background: #f0fdf4;
+    }
+
+    .tab-favicon {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      background: #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+    }
+
+    .tab-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .tab-title {
+      font-size: 12px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tab-url {
+      font-size: 10px;
+      color: #6b7280;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tab-badge {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #22c55e;
+      color: white;
+      font-weight: 500;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px 16px;
+      color: #6b7280;
+    }
+
+    .empty-state-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      font-size: 12px;
+    }
+
+    .footer {
+      padding: 12px 16px;
+      border-top: 1px solid #e5e5e5;
+      background: #f9fafb;
+    }
+
+    .footer-info {
+      font-size: 10px;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    .footer-info a {
+      color: #6b7280;
+      text-decoration: none;
+    }
+
+    .footer-info a:hover {
+      text-decoration: underline;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Scrollbar */
+    .tabs-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .tabs-list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .tabs-list::-webkit-scrollbar-thumb {
+      background: #d1d5db;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-icon">Q</div>
+    <div class="header-text">
+      <h1>FlowQ Browser Relay</h1>
+      <p>AI-powered browser control</p>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Checking...</span>
+    </div>
+    <button class="btn-reconnect" id="btnReconnect">Reconnect</button>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Attached Tabs</div>
+    <div class="tabs-list" id="tabsList">
+      <div class="empty-state">
+        <div class="empty-state-icon">🔌</div>
+        <p>No tabs attached yet.<br>FlowQ will request access when needed.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-info">
+      FlowQ v1.0.0 • <a href="#" id="linkDocs">Documentation</a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
+mod browser;
 mod chat;
 mod db;
 mod mcp;
@@ -1480,6 +1481,123 @@ async fn check_tool_status(name: String) -> Result<ToolStatus, String> {
     Ok(check_tool(&name, version_arg))
 }
 
+// ============ Browser Relay Commands ============
+
+/// Start the browser relay WebSocket server and HTTP API
+#[tauri::command]
+async fn browser_relay_start() -> Result<(), String> {
+    let server = browser::get_browser_relay();
+    server.start().await?;
+
+    // Also start HTTP API for agentic browser control
+    let http_api = browser::get_browser_http_api();
+    http_api.start(server).await?;
+
+    Ok(())
+}
+
+/// Stop the browser relay WebSocket server and HTTP API
+#[tauri::command]
+async fn browser_relay_stop() -> Result<(), String> {
+    let http_api = browser::get_browser_http_api();
+    http_api.stop().await;
+
+    let server = browser::get_browser_relay();
+    server.stop().await;
+    Ok(())
+}
+
+/// Get browser relay connection status
+#[tauri::command]
+async fn browser_relay_status() -> Result<browser::BrowserRelayStatus, String> {
+    let server = browser::get_browser_relay();
+    Ok(server.get_status().await)
+}
+
+/// List all open browser tabs
+#[tauri::command]
+async fn browser_list_tabs() -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::ListTabs).await
+}
+
+/// Open a URL in the browser
+#[tauri::command]
+async fn browser_open_tab(url: String) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Open { url }).await
+}
+
+/// Close a browser tab
+#[tauri::command]
+async fn browser_close_tab(tab_id: u32) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Close { tab_id }).await
+}
+
+/// Attach debugger to a tab
+#[tauri::command]
+async fn browser_attach_tab(tab_id: u32) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Attach { tab_id }).await
+}
+
+/// Detach from a tab
+#[tauri::command]
+async fn browser_detach_tab(tab_id: u32) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Detach { tab_id }).await
+}
+
+/// Get page snapshot (accessibility tree)
+#[tauri::command]
+async fn browser_snapshot(tab_id: u32) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Snapshot { tab_id }).await
+}
+
+/// Execute JavaScript in a tab
+#[tauri::command]
+async fn browser_evaluate(tab_id: u32, expression: String) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Evaluate { tab_id, expression }).await
+}
+
+/// Click an element
+#[tauri::command]
+async fn browser_click(tab_id: u32, selector: String) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Click { tab_id, selector }).await
+}
+
+/// Type text into an element
+#[tauri::command]
+async fn browser_type(tab_id: u32, selector: String, text: String) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Type { tab_id, selector, text }).await
+}
+
+/// Scroll the page
+#[tauri::command]
+async fn browser_scroll(tab_id: u32, direction: String) -> Result<serde_json::Value, String> {
+    let dir = match direction.to_lowercase().as_str() {
+        "up" => browser::ScrollDirection::Up,
+        "down" => browser::ScrollDirection::Down,
+        "left" => browser::ScrollDirection::Left,
+        "right" => browser::ScrollDirection::Right,
+        _ => return Err(format!("Invalid direction: {}", direction)),
+    };
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Scroll { tab_id, direction: dir }).await
+}
+
+/// Take a screenshot
+#[tauri::command]
+async fn browser_screenshot(tab_id: u32) -> Result<serde_json::Value, String> {
+    let server = browser::get_browser_relay();
+    server.send_command(browser::BrowserRequest::Screenshot { tab_id }).await
+}
+
 // ============ App Entry ============
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1514,6 +1632,23 @@ pub fn run() {
                 .expect("Failed to open database");
 
             app.manage(AppState::new(db));
+
+            // Start browser relay server and HTTP API in background
+            let browser_server = browser::get_browser_relay();
+            let http_api = browser::get_browser_http_api();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = browser_server.start().await {
+                    log::error!("Failed to start browser relay server: {}", e);
+                } else {
+                    log::info!("Browser relay server started on ws://127.0.0.1:18799");
+                    // Start HTTP API after WebSocket server is ready
+                    if let Err(e) = http_api.start(browser_server).await {
+                        log::error!("Failed to start browser HTTP API: {}", e);
+                    } else {
+                        log::info!("Browser HTTP API started on http://127.0.0.1:18800");
+                    }
+                }
+            });
 
             log::info!("Tauri app started with CLAUDE_CODE_USE_BEDROCK={}",
                 std::env::var("CLAUDE_CODE_USE_BEDROCK").unwrap_or_default());
@@ -1602,6 +1737,21 @@ pub fn run() {
             // Environment check commands
             check_environment,
             check_tool_status,
+            // Browser relay commands
+            browser_relay_start,
+            browser_relay_stop,
+            browser_relay_status,
+            browser_list_tabs,
+            browser_open_tab,
+            browser_close_tab,
+            browser_attach_tab,
+            browser_detach_tab,
+            browser_snapshot,
+            browser_evaluate,
+            browser_click,
+            browser_type,
+            browser_scroll,
+            browser_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

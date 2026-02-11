@@ -1,0 +1,8 @@
+{
+  "name": "browser-control",
+  "description": "Control the user's Chrome browser with authenticated sessions. Browse pages, click elements, type text, and extract content from websites that require login.",
+  "version": "1.0.0",
+  "author": "FlowQ",
+  "tags": ["browser", "automation", "web", "scraping"],
+  "source": "builtin"
+}

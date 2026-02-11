@@ -1,14 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { File, Folder, FileCode, Hash, User, Search, Globe, Link2 } from 'lucide-react';
+import { File, Folder, FileCode, Hash, User, Search, Globe, Link2, Chrome } from 'lucide-react';
 
 export interface MentionItem {
   id: string;
-  type: 'file' | 'folder' | 'symbol' | 'user' | 'command' | 'url';
+  type: 'file' | 'folder' | 'symbol' | 'user' | 'command' | 'url' | 'browser';
   name: string;
   path?: string;
   description?: string;
   /** Full file path for content injection */
   fullPath?: string;
+  /** Browser tab ID for browser mentions */
+  tabId?: number;
+  /** Whether browser tab is attached */
+  attached?: boolean;
 }
 
 interface MentionSuggestionsProps {
@@ -30,6 +34,7 @@ function getMentionIcon(type: MentionItem['type']) {
     user: <User size={14} className="text-green-500" />,
     command: <span className="text-xs font-mono text-gray-500">/</span>,
     url: <Globe size={14} className="text-cyan-500" />,
+    browser: <Chrome size={14} className="text-emerald-500" />,
   };
   return iconMap[type] || <File size={14} className="text-gray-400" />;
 }

@@ -28,8 +28,16 @@ import McpManager from './McpManager';
 import SkillsManager from './SkillsManager';
 import ClaudeCodeSetup from './ClaudeCodeSetup';
 import EnvironmentSetup from './EnvironmentSetup';
-import type { ApiSettings } from '../lib/tauri-api';
-import { DEFAULT_API_SETTINGS } from '../lib/tauri-api';
+import type { ApiSettings, BrowserRelaySettings, BrowserRelayStatus } from '../lib/tauri-api';
+import {
+  DEFAULT_API_SETTINGS,
+  DEFAULT_BROWSER_RELAY_SETTINGS,
+  getBrowserRelaySettings,
+  saveBrowserRelaySettings,
+  browserRelayStart,
+  browserRelayStop,
+  browserRelayStatus,
+} from '../lib/tauri-api';
 
 interface SettingsPageProps {
   isOpen: boolean;
@@ -123,6 +131,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
   const [isRegionOpen, setIsRegionOpen] = useState(false);
   const { theme, setTheme } = useTheme();
 
+  // Browser relay settings
+  const [browserRelaySettings, setBrowserRelaySettings] = useState<BrowserRelaySettings>(DEFAULT_BROWSER_RELAY_SETTINGS);
+  const [browserRelayConnected, setBrowserRelayConnected] = useState(false);
+  const [browserRelayLoading, setBrowserRelayLoading] = useState(false);
+
   // Sync local API settings when prop changes
   useEffect(() => {
     if (apiSettings) {
@@ -142,7 +155,49 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
       }
     }
 
-    }, []);
+    // Load browser relay settings
+    getBrowserRelaySettings().then(setBrowserRelaySettings);
+  }, []);
+
+  // Check browser relay status periodically when settings panel is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const checkStatus = async () => {
+      try {
+        const status = await browserRelayStatus();
+        setBrowserRelayConnected(status.connected);
+      } catch {
+        setBrowserRelayConnected(false);
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 3000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
+  // Handle browser relay toggle
+  const handleBrowserRelayToggle = async (enabled: boolean) => {
+    setBrowserRelayLoading(true);
+    try {
+      if (enabled) {
+        await browserRelayStart();
+      } else {
+        await browserRelayStop();
+      }
+      const newSettings = { ...browserRelaySettings, enabled };
+      setBrowserRelaySettings(newSettings);
+      await saveBrowserRelaySettings(newSettings);
+      // Check connection status after toggle
+      const status = await browserRelayStatus();
+      setBrowserRelayConnected(status.connected);
+    } catch (error) {
+      console.error('Failed to toggle browser relay:', error);
+    } finally {
+      setBrowserRelayLoading(false);
+    }
+  };
 
   // Save settings to localStorage
   const updateSettings = (updates: Partial<SettingsState>) => {
@@ -690,6 +745,73 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-border" />
+
+                {/* Browser Extension Section */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🌐</span>
+                    <h4 className="text-sm font-semibold text-foreground">Browser Extension</h4>
+                    <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
+                      browserRelaySettings.enabled
+                        ? browserRelayConnected
+                          ? 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30'
+                          : 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30'
+                        : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'
+                    }`}>
+                      {browserRelaySettings.enabled
+                        ? browserRelayConnected ? 'Connected' : 'Waiting'
+                        : 'Disabled'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Enable WebSocket server to connect FlowQ Browser Relay extension. Use @# to mention browser tabs.
+                  </p>
+
+                  {/* Toggle Switch */}
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                        <Globe size={18} className="text-emerald-600 dark:text-emerald-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-foreground">Browser Relay Server</div>
+                        <div className="text-xs text-muted-foreground">
+                          {browserRelaySettings.enabled
+                            ? 'Listening on ws://127.0.0.1:18799'
+                            : 'Server is disabled'}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleBrowserRelayToggle(!browserRelaySettings.enabled)}
+                      disabled={browserRelayLoading}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        browserRelaySettings.enabled
+                          ? 'bg-emerald-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                      } ${browserRelayLoading ? 'opacity-50 cursor-wait' : ''}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                          browserRelaySettings.enabled ? 'translate-x-6' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Privacy Warning */}
+                  {browserRelaySettings.enabled && (
+                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        <strong>⚠️ Privacy Note:</strong> When enabled, the browser extension can read page content from attached tabs.
+                        Only attach tabs you trust. The server only accepts local connections (127.0.0.1).
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Info Box */}

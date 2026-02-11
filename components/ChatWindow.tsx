@@ -26,7 +26,7 @@ import { ChatSession, ChatMessage, Step, SessionStatus, SESSION_STATUS_CONFIG, T
 import AgentSteps from './AgentSteps';
 import ArchitectureDiagram from './ArchitectureDiagram';
 import MarkdownContent from './MarkdownContent';
-import { sendMessage, createSession, chatSend, searchWorkspaceFiles, readFileForMention, fetchUrlForMention, checkClaudeCode, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS, type WorkspaceFile, type ClaudeCodeStatus } from '../lib/tauri-api';
+import { sendMessage, createSession, chatSend, searchWorkspaceFiles, readFileForMention, fetchUrlForMention, checkClaudeCode, browserRelayStatus, browserListTabs, browserAttachTab, browserSnapshot, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS, type WorkspaceFile, type ClaudeCodeStatus, type BrowserTab, type BrowserRelayStatus, type PageSnapshot } from '../lib/tauri-api';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { DocumentMarkdownOverlay } from './overlay/DocumentMarkdownOverlay';
 import EscapeInterruptOverlay from './EscapeInterruptOverlay';
@@ -172,6 +172,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [isMentionLoading, setIsMentionLoading] = useState(false);
   const mentionSearchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const browserTabsRefreshRef = useRef<NodeJS.Timeout | null>(null);
   const [slashCommandState, setSlashCommandState] = useState<{
     isVisible: boolean;
     query: string;
@@ -196,6 +197,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
   const messagesRef = useRef<ChatMessage[]>(session.messages);
   const backendSessionIdRef = useRef<string | null>(null);
   const unlistenRef = useRef<UnlistenFn | null>(null);
+  // Store browser snapshots for injection when sending message
+  const browserSnapshotsRef = useRef<Map<number, { snapshot: PageSnapshot; title: string; url: string }>>(new Map());
   const streamingContentRef = useRef<string>('');
 
   // Keep messagesRef in sync with session.messages
@@ -380,6 +383,69 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
               clearTimeout(mentionSearchTimeoutRef.current);
             }
 
+            // Check for @# - browser tab mention
+            if (query.startsWith('#')) {
+              const tabQuery = query.slice(1).toLowerCase();
+              setIsMentionLoading(true);
+
+              // Fetch browser tabs
+              mentionSearchTimeoutRef.current = setTimeout(async () => {
+                try {
+                  const status = await browserRelayStatus();
+                  if (!status.connected) {
+                    setMentionItems([{
+                      id: 'browser-disconnected',
+                      type: 'browser',
+                      name: 'Browser not connected',
+                      description: 'Install FlowQ Browser Relay extension and open FlowQ',
+                    }]);
+                    setIsMentionLoading(false);
+                    return;
+                  }
+
+                  const tabs = await browserListTabs();
+                  const filteredTabs = tabQuery
+                    ? tabs.filter(tab =>
+                        (tab.title?.toLowerCase().includes(tabQuery)) ||
+                        (tab.url?.toLowerCase().includes(tabQuery))
+                      )
+                    : tabs;
+
+                  const items: MentionItem[] = filteredTabs.slice(0, 10).map(tab => ({
+                    id: `tab-${tab.id}`,
+                    type: 'browser' as const,
+                    name: tab.title || 'Untitled',
+                    path: tab.url || '',
+                    description: tab.attached ? '🔗 Attached' : undefined,
+                    tabId: tab.id,
+                    attached: tab.attached,
+                  }));
+
+                  if (items.length === 0) {
+                    items.push({
+                      id: 'no-tabs',
+                      type: 'browser',
+                      name: tabQuery ? 'No matching tabs' : 'No open tabs',
+                      description: 'Open a page in Chrome to see it here',
+                    });
+                  }
+
+                  setMentionItems(items);
+                } catch (error) {
+                  console.error('Failed to fetch browser tabs:', error);
+                  setMentionItems([{
+                    id: 'browser-error',
+                    type: 'browser',
+                    name: 'Failed to connect',
+                    description: String(error),
+                  }]);
+                } finally {
+                  setIsMentionLoading(false);
+                }
+              }, 100);
+              return;
+            }
+
             // Show type suggestions when query is empty or very short
             if (query === '' || (!query.startsWith('file:') && !query.startsWith('url:') && query.length < 2)) {
               const typeHints: MentionItem[] = [
@@ -394,6 +460,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                   type: 'url',
                   name: 'url:',
                   description: 'Fetch and include URL content',
+                },
+                {
+                  id: 'type-browser',
+                  type: 'browser',
+                  name: '#',
+                  description: 'Get content from browser tab',
                 },
               ];
               // Filter by query if user started typing
@@ -486,10 +558,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
       mentionState.startIndex + mentionState.query.length + 1
     );
 
-    // Check if this is a type hint selection (file: or url:)
-    if (item.id === 'type-file' || item.id === 'type-url') {
+    // Check if this is a type hint selection (file: or url: or #)
+    if (item.id === 'type-file' || item.id === 'type-url' || item.id === 'type-browser') {
       // Insert the type prefix and keep suggestions visible
-      const typePrefix = item.name; // "file:" or "url:"
+      const typePrefix = item.name; // "file:" or "url:" or "#"
       const newValue = `${beforeMention}@${typePrefix}${afterMention}`;
       setInputValue(newValue);
 
@@ -508,6 +580,55 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
           textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
         }
       }, 0);
+      return;
+    }
+
+    // Handle browser tab selection - fetch snapshot and inject content
+    if (item.type === 'browser' && item.tabId) {
+      setMentionState(prev => ({ ...prev, isVisible: false }));
+
+      const tabId = item.tabId;
+      const tabTitle = item.name;
+      const tabUrl = item.path || '';
+      const wasAttached = item.attached;
+
+      // IMMEDIATELY update input with tab mention format
+      // This ensures regex will match even if user sends before snapshot loads
+      const mentionText = `#tab:${tabId}`;
+      const newValue = `${beforeMention}@${mentionText} ${afterMention}`;
+      setInputValue(newValue);
+
+      // Focus textarea immediately
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const newCursorPos = beforeMention.length + mentionText.length + 2;
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+
+      // Fetch snapshot in background - if ready when user sends, use cached version
+      // If not ready, parseMentionsAndInjectContent will fetch live
+      (async () => {
+        try {
+          // Attach to tab if not already attached
+          if (!wasAttached) {
+            await browserAttachTab(tabId);
+          }
+
+          // Get page snapshot and cache it
+          const snapshot = await browserSnapshot(tabId);
+          browserSnapshotsRef.current.set(tabId, {
+            snapshot,
+            title: tabTitle,
+            url: tabUrl,
+          });
+          console.log(`[Browser] Cached snapshot for tab ${tabId}: ${tabTitle}`);
+        } catch (error) {
+          console.error('Failed to pre-fetch browser snapshot:', error);
+          // Don't update input on error - let parseMentionsAndInjectContent handle it
+        }
+      })();
       return;
     }
 
@@ -919,20 +1040,89 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
     };
   }, [session.id, session.title, handleEvent]);
 
-  // Parse @file: and @url: mentions and inject their content
+  // Format browser snapshot for AI consumption with browser control API instructions
+  const formatBrowserSnapshot = (snapshot: PageSnapshot, title: string, tabId?: number): string => {
+    const { page, tree, nodeCount, textContent } = snapshot;
+
+    // Recursively format accessibility tree (simplified)
+    const formatNode = (node: { ref: string; role: string; name: string; children?: any[] }, depth = 0): string => {
+      const indent = '  '.repeat(depth);
+      const children = node.children?.map(c => formatNode(c, depth + 1)).join('') || '';
+      if (!node.name && !children) return '';
+      return `${indent}[${node.ref}] ${node.role}: ${node.name}\n${children}`;
+    };
+
+    const treeText = tree.map(node => formatNode(node)).join('').trim();
+
+    // Truncate text content if too long
+    const truncatedText = textContent
+      ? textContent.length > 8000
+        ? textContent.slice(0, 8000) + '\n... (truncated)'
+        : textContent
+      : '';
+
+    // Browser control API documentation for agentic control
+    const browserApiDocs = tabId ? `
+---
+## ⛔ ABSOLUTE RESTRICTIONS FOR THIS BROWSER TAB
+
+**THIS IS A LIVE BROWSER TAB WITH USER'S LOGIN SESSION. THE FOLLOWING TOOLS ARE ABSOLUTELY FORBIDDEN:**
+- ❌ **WebFetch** - FORBIDDEN (no cookies/auth)
+- ❌ **WebSearch** - FORBIDDEN (use the page content below instead)
+- ❌ **curl/wget on URLs** - FORBIDDEN (no cookies/auth)
+
+**YOU MUST:**
+1. **ANALYZE the "Visible Page Content" section below** - it contains the actual page text
+2. **PRESENT the information** from the content to the user
+3. **USE Browser Control API** only if you need to interact (click, scroll, etc.)
+
+## 🤖 Browser Control API (Tab ID: ${tabId})
+
+\`\`\`bash
+# Get updated snapshot
+curl -s -X POST http://127.0.0.1:18800/snapshot -H "Content-Type: application/json" -d '{"tabId":${tabId}}'
+# Click element
+curl -s -X POST http://127.0.0.1:18800/click -H "Content-Type: application/json" -d '{"tabId":${tabId},"selector":"CSS"}'
+# Scroll down
+curl -s -X POST http://127.0.0.1:18800/scroll -H "Content-Type: application/json" -d '{"tabId":${tabId},"direction":"down"}'
+\`\`\`
+
+---
+` : '';
+
+    return `🌐 **Browser Tab: ${title}**
+**URL:** ${page.url} | **Tab ID:** ${tabId || 'unknown'} | **Scroll:** ${Math.round(page.scrollY)}/${Math.round(page.scrollHeight)}
+${browserApiDocs}
+## Visible Page Content (ANALYZE THIS AND PRESENT TO USER):
+\`\`\`
+${truncatedText || '(No text content extracted)'}
+\`\`\`
+
+## Interactive Elements (${nodeCount} nodes):
+\`\`\`
+${treeText.slice(0, 3000)}${treeText.length > 3000 ? '\n... (truncated)' : ''}
+\`\`\`
+`;
+  };
+
+  // Parse @file: and @url: and @#tab: mentions and inject their content
   const parseMentionsAndInjectContent = async (text: string): Promise<string> => {
-    // Regex to match @file:path and @url:url mentions
-    const mentionRegex = /@(file|url):([^\s]+)/g;
-    const mentions: { match: string; type: 'file' | 'url'; path: string }[] = [];
+    // Regex to match @file:path, @url:url, and @#tab:id mentions
+    const mentionRegex = /@(file|url|#tab):([^\s]+)/g;
+    const mentions: { match: string; type: 'file' | 'url' | 'browser'; path: string }[] = [];
 
     let match;
     while ((match = mentionRegex.exec(text)) !== null) {
+      const type = match[1] === '#tab' ? 'browser' : match[1] as 'file' | 'url';
       mentions.push({
         match: match[0],
-        type: match[1] as 'file' | 'url',
+        type,
         path: match[2],
       });
     }
+
+    console.log('[Mentions] Parsing text:', text.slice(0, 100));
+    console.log('[Mentions] Found mentions:', mentions);
 
     if (mentions.length === 0) {
       return text;
@@ -953,6 +1143,31 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
             ? content.slice(0, 10000) + '\n\n... (content truncated)'
             : content;
           contentMap.set(mention.match, `\n\n🔗 **URL: ${mention.path}**\n\`\`\`\n${truncatedContent}\n\`\`\`\n`);
+        } else if (mention.type === 'browser') {
+          // Get snapshot from cache or fetch live
+          const tabId = parseInt(mention.path);
+          console.log(`[Browser] Processing tab mention: ${tabId}`);
+          const cached = browserSnapshotsRef.current.get(tabId);
+          if (cached) {
+            console.log(`[Browser] Using cached snapshot for tab ${tabId}`);
+            content = formatBrowserSnapshot(cached.snapshot, cached.title, tabId);
+            contentMap.set(mention.match, `\n\n${content}\n`);
+            // Clear from cache after use
+            browserSnapshotsRef.current.delete(tabId);
+          } else {
+            console.log(`[Browser] No cache, fetching live snapshot for tab ${tabId}`);
+            // Try to fetch live snapshot
+            try {
+              await browserAttachTab(tabId);
+              const snapshot = await browserSnapshot(tabId);
+              console.log(`[Browser] Got live snapshot:`, snapshot.page?.url);
+              content = formatBrowserSnapshot(snapshot, `Tab ${tabId}`, tabId);
+              contentMap.set(mention.match, `\n\n${content}\n`);
+            } catch (e) {
+              console.error(`[Browser] Failed to get snapshot:`, e);
+              contentMap.set(mention.match, `\n\n⚠️ **Failed to get browser tab ${tabId}**\nError: ${e}\n`);
+            }
+          }
         }
       } catch (error) {
         console.error(`Failed to fetch content for ${mention.match}:`, error);

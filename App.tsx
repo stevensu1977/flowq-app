@@ -20,6 +20,9 @@ import {
   setWorkspaceBackend,
   getApiSettings,
   saveApiSettings,
+  getBrowserRelaySettings,
+  browserRelayStart,
+  browserRelayStop,
   type ApiSettings,
   DEFAULT_API_SETTINGS,
 } from './lib/tauri-api';
@@ -48,6 +51,25 @@ const App: React.FC = () => {
   // Load API settings on mount
   useEffect(() => {
     getApiSettings().then(settings => setApiSettings(settings));
+  }, []);
+
+  // Initialize browser relay based on saved settings
+  useEffect(() => {
+    const initBrowserRelay = async () => {
+      try {
+        const settings = await getBrowserRelaySettings();
+        // Server is started by Rust on app init, stop it if user has disabled
+        if (!settings.enabled) {
+          console.log('[App] Browser relay disabled by user, stopping server...');
+          await browserRelayStop();
+        } else {
+          console.log('[App] Browser relay enabled, server should be running');
+        }
+      } catch (error) {
+        console.error('[App] Failed to initialize browser relay:', error);
+      }
+    };
+    initBrowserRelay();
   }, []);
 
   // Save API settings handler

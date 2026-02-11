@@ -863,3 +863,180 @@ export async function checkEnvironment(): Promise<EnvironmentStatus> {
 export async function checkToolStatus(name: string): Promise<ToolStatus> {
   return invoke<ToolStatus>('check_tool_status', { name })
 }
+
+// ============ Browser Relay API ============
+
+export interface BrowserRelaySettings {
+  enabled: boolean
+}
+
+const BROWSER_RELAY_SETTINGS_KEY = 'browser_relay_settings'
+
+export const DEFAULT_BROWSER_RELAY_SETTINGS: BrowserRelaySettings = {
+  enabled: false, // Disabled by default for privacy
+}
+
+/**
+ * Get browser relay settings
+ */
+export async function getBrowserRelaySettings(): Promise<BrowserRelaySettings> {
+  try {
+    const { load } = await import('@tauri-apps/plugin-store')
+    const store = await load('settings.json', { autoSave: true, defaults: {} })
+    const settings = await store.get<BrowserRelaySettings>(BROWSER_RELAY_SETTINGS_KEY)
+    return settings ? { ...DEFAULT_BROWSER_RELAY_SETTINGS, ...settings } : DEFAULT_BROWSER_RELAY_SETTINGS
+  } catch (e) {
+    console.error('Failed to get browser relay settings:', e)
+    return DEFAULT_BROWSER_RELAY_SETTINGS
+  }
+}
+
+/**
+ * Save browser relay settings
+ */
+export async function saveBrowserRelaySettings(settings: BrowserRelaySettings): Promise<void> {
+  try {
+    const { load } = await import('@tauri-apps/plugin-store')
+    const store = await load('settings.json', { autoSave: true, defaults: {} })
+    await store.set(BROWSER_RELAY_SETTINGS_KEY, settings)
+    await store.save()
+  } catch (e) {
+    console.error('Failed to save browser relay settings:', e)
+  }
+}
+
+export interface BrowserRelayStatus {
+  connected: boolean
+  extensionVersion: string | null
+  attachedTabs: BrowserTab[]
+}
+
+export interface BrowserTab {
+  id: number
+  url: string | null
+  title: string | null
+  active: boolean
+  attached: boolean
+}
+
+export interface PageSnapshot {
+  page: {
+    url: string
+    title: string
+    scrollY: number
+    scrollHeight: number
+    viewportHeight: number
+  }
+  tree: AccessibilityNode[]
+  nodeCount: number
+  textContent?: string
+}
+
+export interface AccessibilityNode {
+  ref: string
+  role: string
+  name: string
+  children?: AccessibilityNode[]
+}
+
+/**
+ * Start the browser relay WebSocket server
+ */
+export async function browserRelayStart(): Promise<void> {
+  return invoke<void>('browser_relay_start')
+}
+
+/**
+ * Stop the browser relay WebSocket server
+ */
+export async function browserRelayStop(): Promise<void> {
+  return invoke<void>('browser_relay_stop')
+}
+
+/**
+ * Get browser relay connection status
+ */
+export async function browserRelayStatus(): Promise<BrowserRelayStatus> {
+  return invoke<BrowserRelayStatus>('browser_relay_status')
+}
+
+/**
+ * List all open browser tabs
+ */
+export async function browserListTabs(): Promise<BrowserTab[]> {
+  const result = await invoke<unknown>('browser_list_tabs')
+  return result as BrowserTab[]
+}
+
+/**
+ * Open a URL in the browser
+ */
+export async function browserOpenTab(url: string): Promise<BrowserTab> {
+  const result = await invoke<unknown>('browser_open_tab', { url })
+  return result as BrowserTab
+}
+
+/**
+ * Close a browser tab
+ */
+export async function browserCloseTab(tabId: number): Promise<void> {
+  await invoke<unknown>('browser_close_tab', { tabId })
+}
+
+/**
+ * Attach debugger to a tab (required before other operations)
+ */
+export async function browserAttachTab(tabId: number): Promise<void> {
+  await invoke<unknown>('browser_attach_tab', { tabId })
+}
+
+/**
+ * Detach from a tab
+ */
+export async function browserDetachTab(tabId: number): Promise<void> {
+  await invoke<unknown>('browser_detach_tab', { tabId })
+}
+
+/**
+ * Get page snapshot (accessibility tree for AI understanding)
+ */
+export async function browserSnapshot(tabId: number): Promise<PageSnapshot> {
+  const result = await invoke<unknown>('browser_snapshot', { tabId })
+  return result as PageSnapshot
+}
+
+/**
+ * Execute JavaScript in a tab
+ */
+export async function browserEvaluate(tabId: number, expression: string): Promise<unknown> {
+  return invoke<unknown>('browser_evaluate', { tabId, expression })
+}
+
+/**
+ * Click an element (by CSS selector or accessibility ref)
+ */
+export async function browserClick(tabId: number, selector: string): Promise<void> {
+  await invoke<unknown>('browser_click', { tabId, selector })
+}
+
+/**
+ * Type text into an element
+ */
+export async function browserType(tabId: number, selector: string, text: string): Promise<void> {
+  await invoke<unknown>('browser_type', { tabId, selector, text })
+}
+
+/**
+ * Scroll the page
+ */
+export async function browserScroll(tabId: number, direction: 'up' | 'down' | 'left' | 'right'): Promise<void> {
+  await invoke<unknown>('browser_scroll', { tabId, direction })
+}
+
+/**
+ * Take a screenshot
+ */
+export async function browserScreenshot(tabId: number): Promise<{ data: string; format: string }> {
+  const result = await invoke<unknown>('browser_screenshot', { tabId })
+  return result as { data: string; format: string }
+}
