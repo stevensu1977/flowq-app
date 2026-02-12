@@ -1,6 +1,19 @@
 //! WebSocket server for FlowQ Browser Relay extension
 
 use std::collections::HashMap;
+
+/// Safely truncate a UTF-8 string to approximately max_bytes without breaking characters
+fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    // Find the last valid UTF-8 boundary before max_bytes
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, RwLock};
@@ -250,7 +263,7 @@ async fn handle_connection(
     // Spawn writer task
     let write_handle = tokio::spawn(async move {
         while let Some(msg) = outgoing_rx.recv().await {
-            log::debug!("Sending WebSocket message: {}", &msg[..msg.len().min(200)]);
+            log::debug!("Sending WebSocket message: {}", truncate_utf8(&msg, 200));
             if let Err(e) = write.send(Message::Text(msg)).await {
                 log::error!("Failed to send message: {}", e);
                 break;
@@ -274,23 +287,31 @@ async fn handle_connection(
     while let Some(msg) = read.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                log::debug!("Received WebSocket message: {}", &text[..text.len().min(200)]);
+                log::debug!("Received WebSocket message: {}", truncate_utf8(&text, 200));
                 // Parse message
                 match serde_json::from_str::<serde_json::Value>(&text) {
                     Ok(value) => {
                         // Check message type
                         if let Some(msg_type) = value.get("type").and_then(|t| t.as_str()) {
                             match msg_type {
-                                "response" => {
-                                    // Handle response
-                                    if let Ok(response) = serde_json::from_value::<BrowserResponse>(value) {
-                                        log::debug!("Processing response for request_id: {}", response.request_id);
+                                "response" | "error" => {
+                                    // Handle response or error
+                                    if let Some(request_id) = value.get("requestId").and_then(|r| r.as_str()) {
+                                        log::debug!("Processing {} for request_id: {}", msg_type, request_id);
+                                        let response = BrowserResponse {
+                                            response_type: msg_type.to_string(),
+                                            request_id: request_id.to_string(),
+                                            result: value.get("result").cloned(),
+                                            error: value.get("error").and_then(|e| e.as_str()).map(|s| s.to_string()),
+                                        };
                                         let mut pending = pending_requests.write().await;
-                                        if let Some(tx) = pending.remove(&response.request_id) {
+                                        if let Some(tx) = pending.remove(request_id) {
                                             let _ = tx.send(response);
                                         } else {
-                                            log::warn!("No pending request found for request_id");
+                                            log::warn!("No pending request found for request_id: {}", request_id);
                                         }
+                                    } else {
+                                        log::warn!("Response/error missing requestId: {:?}", value);
                                     }
                                 }
                                 "relay_ready" | "tab_closed" | "tab_navigated" | "debugger_detached" => {
@@ -351,6 +372,24 @@ async fn handle_connection(
     {
         let mut tx_holder = outgoing_tx_holder.write().await;
         *tx_holder = None;
+    }
+
+    // Cancel all pending requests with connection closed error
+    {
+        let mut pending = pending_requests.write().await;
+        let count = pending.len();
+        if count > 0 {
+            log::warn!("Connection closed, canceling {} pending requests", count);
+            for (request_id, tx) in pending.drain() {
+                let error_response = BrowserResponse {
+                    response_type: "error".to_string(),
+                    request_id,
+                    result: None,
+                    error: Some("Connection closed".to_string()),
+                };
+                let _ = tx.send(error_response);
+            }
+        }
     }
 
     // Clean up
