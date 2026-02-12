@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { File, Folder, FileCode, Hash, User, Search, Globe, Link2, Chrome } from 'lucide-react';
+import { File, Folder, FileCode, Hash, User, Search, Globe, Link2, Chrome, Rss } from 'lucide-react';
 
 export interface MentionItem {
   id: string;
-  type: 'file' | 'folder' | 'symbol' | 'user' | 'command' | 'url' | 'browser';
+  type: 'file' | 'folder' | 'symbol' | 'user' | 'command' | 'url' | 'browser' | 'rss';
   name: string;
   path?: string;
   description?: string;
@@ -13,6 +13,10 @@ export interface MentionItem {
   tabId?: number;
   /** Whether browser tab is attached */
   attached?: boolean;
+  /** RSS feed ID for RSS mentions */
+  feedId?: string;
+  /** RSS category for category-based mentions */
+  categoryId?: string;
 }
 
 interface MentionSuggestionsProps {
@@ -35,6 +39,7 @@ function getMentionIcon(type: MentionItem['type']) {
     command: <span className="text-xs font-mono text-gray-500">/</span>,
     url: <Globe size={14} className="text-cyan-500" />,
     browser: <Chrome size={14} className="text-emerald-500" />,
+    rss: <Rss size={14} className="text-orange-500" />,
   };
   return iconMap[type] || <File size={14} className="text-gray-400" />;
 }

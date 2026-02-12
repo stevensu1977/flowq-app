@@ -1040,3 +1040,213 @@ export async function browserScreenshot(tabId: number): Promise<{ data: string; 
   const result = await invoke<unknown>('browser_screenshot', { tabId })
   return result as { data: string; format: string }
 }
+
+// ============ RSS Feed API ============
+
+export interface RSSFetchResult {
+  content: string
+  content_type: string
+  etag: string | null
+  last_modified: string | null
+  status_code: number
+}
+
+export interface RSSParsedFeed {
+  title: string
+  description: string | null
+  link: string | null
+  icon: string | null
+  items: RSSParsedItem[]
+}
+
+export interface RSSParsedItem {
+  guid: string | null
+  title: string | null
+  link: string | null
+  description: string | null
+  content: string | null
+  author: string | null
+  pub_date: string | null
+  enclosures: RSSParsedEnclosure[]
+}
+
+export interface RSSParsedEnclosure {
+  url: string
+  media_type: string
+  length: number | null
+}
+
+export interface StoredFeed {
+  id: string
+  url: string
+  title: string
+  description: string | null
+  site_url: string | null
+  icon_url: string | null
+  category_id: string | null
+  tags: string[]
+  status: string
+  error_message: string | null
+  last_fetched_at: string | null
+  etag: string | null
+  last_modified: string | null
+  article_count: number
+  unread_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface StoredCategory {
+  id: string
+  name: string
+  color: string | null
+  feed_count: number
+  created_at: string
+}
+
+export interface StoredArticle {
+  id: string
+  feed_id: string
+  title: string
+  link: string
+  content: string
+  summary: string | null
+  author: string | null
+  image_url: string | null
+  enclosures: string | null  // JSON array
+  published_at: string
+  fetched_at: string
+  is_read: boolean
+  is_starred: boolean
+  topics: string | null  // JSON array
+}
+
+/**
+ * Fetch RSS feed content with conditional caching
+ */
+export async function rssFetch(
+  url: string,
+  etag?: string,
+  lastModified?: string
+): Promise<RSSFetchResult> {
+  return invoke<RSSFetchResult>('rss_fetch', { url, etag, lastModified })
+}
+
+/**
+ * Fetch and parse RSS feed
+ */
+export async function rssFetchAndParse(url: string): Promise<RSSParsedFeed> {
+  return invoke<RSSParsedFeed>('rss_fetch_and_parse', { url })
+}
+
+/**
+ * Parse RSS content
+ */
+export async function rssParse(content: string): Promise<RSSParsedFeed> {
+  return invoke<RSSParsedFeed>('rss_parse', { content })
+}
+
+/**
+ * Get all RSS feeds
+ */
+export async function rssGetFeeds(): Promise<StoredFeed[]> {
+  return invoke<StoredFeed[]>('rss_get_feeds')
+}
+
+/**
+ * Create a new RSS feed
+ */
+export async function rssCreateFeed(feed: StoredFeed): Promise<void> {
+  return invoke<void>('rss_create_feed', { feed })
+}
+
+/**
+ * Update an existing RSS feed
+ */
+export async function rssUpdateFeed(feed: StoredFeed): Promise<void> {
+  return invoke<void>('rss_update_feed', { feed })
+}
+
+/**
+ * Delete an RSS feed
+ */
+export async function rssDeleteFeed(id: string): Promise<void> {
+  return invoke<void>('rss_delete_feed', { id })
+}
+
+/**
+ * Get all RSS categories
+ */
+export async function rssGetCategories(): Promise<StoredCategory[]> {
+  return invoke<StoredCategory[]>('rss_get_categories')
+}
+
+/**
+ * Create a new RSS category
+ */
+export async function rssCreateCategory(category: StoredCategory): Promise<void> {
+  return invoke<void>('rss_create_category', { category })
+}
+
+/**
+ * Delete an RSS category
+ */
+export async function rssDeleteCategory(id: string): Promise<void> {
+  return invoke<void>('rss_delete_category', { id })
+}
+
+/**
+ * Insert or update articles (returns count of new articles)
+ */
+export async function rssUpsertArticles(articles: StoredArticle[]): Promise<number> {
+  return invoke<number>('rss_upsert_articles', { articles })
+}
+
+/**
+ * Get articles for a feed
+ */
+export async function rssGetArticles(feedId: string, limit: number = 100): Promise<StoredArticle[]> {
+  return invoke<StoredArticle[]>('rss_get_articles', { feedId, limit })
+}
+
+/**
+ * Get recent articles across all feeds
+ */
+export async function rssGetRecentArticles(hours: number = 24, limit: number = 50): Promise<StoredArticle[]> {
+  return invoke<StoredArticle[]>('rss_get_recent_articles', { hours, limit })
+}
+
+/**
+ * Search articles using full-text search
+ */
+export async function rssSearchArticles(query: string, limit: number = 50): Promise<StoredArticle[]> {
+  return invoke<StoredArticle[]>('rss_search_articles', { query, limit })
+}
+
+/**
+ * Mark article as read
+ */
+export async function rssMarkArticleRead(id: string, isRead: boolean): Promise<void> {
+  return invoke<void>('rss_mark_article_read', { id, isRead })
+}
+
+/**
+ * Toggle article starred status
+ */
+export async function rssToggleArticleStarred(id: string): Promise<boolean> {
+  return invoke<boolean>('rss_toggle_article_starred', { id })
+}
+
+/**
+ * Get starred articles
+ */
+export async function rssGetStarredArticles(limit: number = 100): Promise<StoredArticle[]> {
+  return invoke<StoredArticle[]>('rss_get_starred_articles', { limit })
+}
+
+/**
+ * Delete old articles (retention cleanup)
+ */
+export async function rssCleanupOldArticles(days: number = 30): Promise<number> {
+  return invoke<number>('rss_cleanup_old_articles', { days })
+}

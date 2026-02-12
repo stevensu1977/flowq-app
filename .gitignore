@@ -31,3 +31,10 @@ src-tauri/target/
 
 # Internal documentation (not tracked)
 internal_docs/
+
+# FlowQ local data (sessions, memory)
+.flowq/
+
+# Personal/draft documents
+*.draft.md
+2025-*.md

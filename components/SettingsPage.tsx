@@ -28,6 +28,7 @@ import McpManager from './McpManager';
 import SkillsManager from './SkillsManager';
 import ClaudeCodeSetup from './ClaudeCodeSetup';
 import EnvironmentSetup from './EnvironmentSetup';
+import RSSIntegration from './RSSIntegration';
 import type { ApiSettings, BrowserRelaySettings, BrowserRelayStatus } from '../lib/tauri-api';
 import {
   DEFAULT_API_SETTINGS,
@@ -114,6 +115,119 @@ const SHORTCUTS = [
   { key: 'Shift+Enter', description: 'New line in message' },
   { key: '⌘+Click', description: 'Open link in browser' },
 ];
+
+// Browser Integration Card Component
+interface BrowserIntegrationCardProps {
+  enabled: boolean;
+  connected: boolean;
+  loading: boolean;
+  onToggle: () => void;
+}
+
+const BrowserIntegrationCard: React.FC<BrowserIntegrationCardProps> = ({
+  enabled,
+  connected,
+  loading,
+  onToggle,
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const getStatus = () => {
+    if (!enabled) return { text: 'Disabled', color: 'text-muted-foreground' };
+    if (connected) return { text: 'Connected', color: 'text-emerald-500' };
+    return { text: 'Waiting...', color: 'text-amber-500' };
+  };
+
+  const status = getStatus();
+
+  return (
+    <div
+      className={`rounded-xl border transition-all duration-200 ${
+        isExpanded
+          ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50/50 dark:bg-emerald-900/10 shadow-sm'
+          : 'border-border hover:border-emerald-300/50 dark:hover:border-emerald-700/50 hover:bg-muted/30'
+      }`}
+    >
+      {/* Header */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full flex items-center gap-3 p-4 text-left"
+      >
+        <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+          <Globe size={20} className="text-emerald-600 dark:text-emerald-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-foreground">Browser Extension</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Capture browser tabs, use @# in chat
+          </div>
+        </div>
+        <div className={`flex items-center gap-1.5 text-xs ${status.color}`}>
+          {enabled && connected && <Check size={12} />}
+          <span>{status.text}</span>
+        </div>
+        <ChevronDown
+          size={16}
+          className={`text-muted-foreground transition-transform duration-200 ${
+            isExpanded ? 'rotate-180' : ''
+          }`}
+        />
+      </button>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 pt-0 space-y-4 animate-fade-in">
+          <div className="border-t border-emerald-200/50 dark:border-emerald-800/30" />
+
+          {/* Toggle Switch */}
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-white dark:bg-gray-800/50">
+            <div>
+              <div className="text-sm font-medium text-foreground">WebSocket Server</div>
+              <div className="text-xs text-muted-foreground">
+                {enabled ? 'ws://127.0.0.1:18799' : 'Start server to connect'}
+              </div>
+            </div>
+            <button
+              onClick={onToggle}
+              disabled={loading}
+              className={`relative w-11 h-6 rounded-full transition-colors ${
+                enabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'
+              } ${loading ? 'opacity-50 cursor-wait' : ''}`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                  enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Warning */}
+          {enabled && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-200/50 dark:border-amber-800/30">
+              <p className="text-xs text-amber-700 dark:text-amber-300">
+                <strong>⚠️ Note:</strong> Only attach tabs you trust. The extension can read page content from attached tabs.
+              </p>
+            </div>
+          )}
+
+          {/* Usage Hint */}
+          <div className="p-3 bg-emerald-50 dark:bg-emerald-900/10 rounded-lg border border-emerald-200/50 dark:border-emerald-800/30">
+            <p className="text-xs text-muted-foreground">
+              <strong className="text-foreground">Usage:</strong> Type{' '}
+              <code className="px-1 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 rounded text-emerald-700 dark:text-emerald-300">
+                @#
+              </code>{' '}
+              in chat to select and include browser tab content.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab, apiSettings, onSaveApiSettings }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'preferences');
@@ -671,153 +785,78 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialTab
             {/* Integrations Settings */}
             {activeTab === 'integrations' && (
               <div className="space-y-6">
-                {/* Local Note Apps Section */}
+                {/* Active Integrations - Data Sources */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg">💻</span>
-                    <h4 className="text-sm font-semibold text-foreground">Local Note Apps</h4>
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 rounded">
-                      100% Private
+                    <span className="text-lg">📡</span>
+                    <h4 className="text-sm font-semibold text-foreground">Data Sources</h4>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 rounded">
+                      Active
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground mb-4">
-                    Connect local note-taking apps. Data stays on your machine.
+                    Connect external data sources. Use @mentions in chat to include context.
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
+
+                  <div className="space-y-3">
+                    {/* RSS Feeds - Expandable Card */}
+                    <RSSIntegration />
+
+                    {/* Browser Extension - Expandable Card */}
+                    <BrowserIntegrationCard
+                      enabled={browserRelaySettings.enabled}
+                      connected={browserRelayConnected}
+                      loading={browserRelayLoading}
+                      onToggle={() => handleBrowserRelayToggle(!browserRelaySettings.enabled)}
+                    />
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-border" />
+
+                {/* Coming Soon - Cloud & Local Integrations */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🔌</span>
+                    <h4 className="text-sm font-semibold text-foreground">More Integrations</h4>
+                    <span className="px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 rounded">
+                      Coming Soon
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Connect apps and services. Local integrations are 100% private.
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {[
-                      { name: 'Obsidian', icon: '💎', description: 'Markdown vault', color: 'purple' },
-                      { name: 'Craft', icon: '📝', description: 'Rich documents', color: 'blue' },
-                      { name: 'Logseq', icon: '🌳', description: 'Outliner & PKM', color: 'green' },
-                      { name: 'Bear', icon: '🐻', description: 'Markdown notes', color: 'red' },
+                      { name: 'Obsidian', icon: '💎', type: 'local' },
+                      { name: 'Notion', icon: '📄', type: 'cloud' },
+                      { name: 'GitHub', icon: '🐙', type: 'cloud' },
+                      { name: 'Logseq', icon: '🌳', type: 'local' },
+                      { name: 'Google Drive', icon: '📁', type: 'cloud' },
+                      { name: 'Linear', icon: '📊', type: 'cloud' },
                     ].map((app) => (
-                      <button
+                      <div
                         key={app.name}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent/30 hover:bg-accent/5 transition-all text-left group"
+                        className="flex items-center gap-2 p-3 rounded-xl border border-border bg-muted/20 opacity-60 cursor-not-allowed"
                       >
-                        <div className={`w-9 h-9 rounded-lg bg-${app.color}-100 dark:bg-${app.color}-900/30 flex items-center justify-center`}>
-                          <span className="text-lg">{app.icon}</span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-foreground">{app.name}</div>
-                          <div className="text-xs text-muted-foreground">{app.description}</div>
-                        </div>
-                        <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                          Connect →
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-border" />
-
-                {/* Cloud Integrations Section */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg">☁️</span>
-                    <h4 className="text-sm font-semibold text-foreground">Cloud Integrations</h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Connect cloud services via OAuth. Requires authentication.
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {[
-                      { name: 'Notion', icon: '📄', description: 'Wikis & databases' },
-                      { name: 'GitHub', icon: '🐙', description: 'Repos & issues' },
-                      { name: 'Google Drive', icon: '📁', description: 'Docs & files' },
-                      { name: 'Linear', icon: '📊', description: 'Issue tracking' },
-                      { name: 'Slack', icon: '💬', description: 'Team messages' },
-                      { name: 'Jira', icon: '🎯', description: 'Project tracking' },
-                    ].map((integration) => (
-                      <button
-                        key={integration.name}
-                        className="flex items-center gap-3 p-3 rounded-xl border border-border hover:border-accent/30 hover:bg-accent/5 transition-all text-left group"
-                      >
-                        <span className="text-xl">{integration.icon}</span>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium text-foreground">{integration.name}</div>
-                          <div className="text-xs text-muted-foreground">{integration.description}</div>
-                        </div>
-                        <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
-                          Connect →
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Divider */}
-                <div className="border-t border-border" />
-
-                {/* Browser Extension Section */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-lg">🌐</span>
-                    <h4 className="text-sm font-semibold text-foreground">Browser Extension</h4>
-                    <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${
-                      browserRelaySettings.enabled
-                        ? browserRelayConnected
-                          ? 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30'
-                          : 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30'
-                        : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'
-                    }`}>
-                      {browserRelaySettings.enabled
-                        ? browserRelayConnected ? 'Connected' : 'Waiting'
-                        : 'Disabled'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Enable WebSocket server to connect FlowQ Browser Relay extension. Use @# to mention browser tabs.
-                  </p>
-
-                  {/* Toggle Switch */}
-                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                        <Globe size={18} className="text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-medium text-foreground">Browser Relay Server</div>
-                        <div className="text-xs text-muted-foreground">
-                          {browserRelaySettings.enabled
-                            ? 'Listening on ws://127.0.0.1:18799'
-                            : 'Server is disabled'}
+                        <span className="text-lg">{app.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-foreground truncate">{app.name}</div>
+                          <div className="text-[10px] text-muted-foreground capitalize">{app.type}</div>
                         </div>
                       </div>
-                    </div>
-                    <button
-                      onClick={() => handleBrowserRelayToggle(!browserRelaySettings.enabled)}
-                      disabled={browserRelayLoading}
-                      className={`relative w-12 h-6 rounded-full transition-colors ${
-                        browserRelaySettings.enabled
-                          ? 'bg-emerald-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                      } ${browserRelayLoading ? 'opacity-50 cursor-wait' : ''}`}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                          browserRelaySettings.enabled ? 'translate-x-6' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+                    ))}
                   </div>
-
-                  {/* Privacy Warning */}
-                  {browserRelaySettings.enabled && (
-                    <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                      <p className="text-xs text-amber-700 dark:text-amber-300">
-                        <strong>⚠️ Privacy Note:</strong> When enabled, the browser extension can read page content from attached tabs.
-                        Only attach tabs you trust. The server only accepts local connections (127.0.0.1).
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 {/* Info Box */}
                 <div className="p-4 bg-accent/5 rounded-xl border border-accent/20">
                   <p className="text-xs text-muted-foreground">
-                    <strong className="text-foreground">Privacy Note:</strong> Local note apps access files directly on your machine—no data leaves your computer. Cloud integrations use OAuth and only fetch data when requested.
+                    <strong className="text-foreground">Tip:</strong> Use{' '}
+                    <code className="px-1 py-0.5 bg-muted rounded text-foreground text-[10px]">@rss</code> for RSS feeds or{' '}
+                    <code className="px-1 py-0.5 bg-muted rounded text-foreground text-[10px]">@#</code> for browser tabs in chat.
                   </p>
                 </div>
               </div>

@@ -27,6 +27,7 @@ import AgentSteps from './AgentSteps';
 import ArchitectureDiagram from './ArchitectureDiagram';
 import MarkdownContent from './MarkdownContent';
 import { sendMessage, createSession, chatSend, searchWorkspaceFiles, readFileForMention, fetchUrlForMention, checkClaudeCode, browserRelayStatus, browserListTabs, browserAttachTab, browserSnapshot, type SessionEvent, type SimpleChatMessage, type ApiSettings, DEFAULT_API_SETTINGS, type WorkspaceFile, type ClaudeCodeStatus, type BrowserTab, type BrowserRelayStatus, type PageSnapshot } from '../lib/tauri-api';
+import { getRSSManager, getRSSMentionSuggestions, processRSSMention, hasRSSMention } from '../lib/rss';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { DocumentMarkdownOverlay } from './overlay/DocumentMarkdownOverlay';
 import EscapeInterruptOverlay from './EscapeInterruptOverlay';
@@ -446,6 +447,102 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
               return;
             }
 
+            // Check for @rss, @news, @feed: - RSS mention
+            if (query.startsWith('rss') || query.startsWith('news') || query.startsWith('feed:')) {
+              setIsMentionLoading(true);
+
+              mentionSearchTimeoutRef.current = setTimeout(async () => {
+                try {
+                  const rssManager = getRSSManager();
+                  await rssManager.init();
+
+                  const feeds = rssManager.getManagedFeeds();
+                  const categories = rssManager.getCategories();
+                  const items: MentionItem[] = [];
+
+                  // Handle @feed:xxx - search specific feeds
+                  if (query.startsWith('feed:')) {
+                    const feedQuery = query.slice(5).toLowerCase();
+                    const filteredFeeds = feedQuery
+                      ? feeds.filter(f => f.title.toLowerCase().includes(feedQuery))
+                      : feeds;
+
+                    for (const feed of filteredFeeds.slice(0, 10)) {
+                      items.push({
+                        id: `rss-feed-${feed.id}`,
+                        type: 'rss' as const,
+                        name: feed.title,
+                        path: feed.url,
+                        description: `${feed.unread_count} unread articles`,
+                        feedId: feed.id,
+                      });
+                    }
+
+                    if (items.length === 0) {
+                      items.push({
+                        id: 'no-feeds',
+                        type: 'rss',
+                        name: feedQuery ? 'No matching feeds' : 'No RSS feeds configured',
+                        description: 'Add feeds in Settings > Integrations > RSS',
+                      });
+                    }
+                  } else {
+                    // Handle @rss or @news - show all options
+                    items.push({
+                      id: 'rss-all',
+                      type: 'rss' as const,
+                      name: query.startsWith('news') ? '@news' : '@rss',
+                      description: `All feeds (${feeds.length} configured)`,
+                    });
+
+                    // Add category suggestions
+                    for (const category of categories) {
+                      items.push({
+                        id: `rss-cat-${category.id}`,
+                        type: 'rss' as const,
+                        name: `@rss:${category.name.toLowerCase()}`,
+                        description: `${category.feed_count} feeds in ${category.name}`,
+                        categoryId: category.id,
+                      });
+                    }
+
+                    // Add individual feed suggestions (top 5)
+                    for (const feed of feeds.slice(0, 5)) {
+                      items.push({
+                        id: `rss-feed-${feed.id}`,
+                        type: 'rss' as const,
+                        name: `@feed:${feed.title.toLowerCase().replace(/\s+/g, '-')}`,
+                        description: feed.title,
+                        feedId: feed.id,
+                      });
+                    }
+
+                    if (feeds.length === 0) {
+                      items.push({
+                        id: 'no-feeds',
+                        type: 'rss',
+                        name: 'No RSS feeds configured',
+                        description: 'Add feeds in Settings > Integrations > RSS',
+                      });
+                    }
+                  }
+
+                  setMentionItems(items);
+                } catch (error) {
+                  console.error('Failed to fetch RSS data:', error);
+                  setMentionItems([{
+                    id: 'rss-error',
+                    type: 'rss',
+                    name: 'Failed to load RSS',
+                    description: String(error),
+                  }]);
+                } finally {
+                  setIsMentionLoading(false);
+                }
+              }, 100);
+              return;
+            }
+
             // Show type suggestions when query is empty or very short
             if (query === '' || (!query.startsWith('file:') && !query.startsWith('url:') && query.length < 2)) {
               const typeHints: MentionItem[] = [
@@ -466,6 +563,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
                   type: 'browser',
                   name: '#',
                   description: 'Get content from browser tab',
+                },
+                {
+                  id: 'type-rss',
+                  type: 'rss',
+                  name: 'rss',
+                  description: 'Include RSS feed articles',
                 },
               ];
               // Filter by query if user started typing
@@ -558,10 +661,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
       mentionState.startIndex + mentionState.query.length + 1
     );
 
-    // Check if this is a type hint selection (file: or url: or #)
-    if (item.id === 'type-file' || item.id === 'type-url' || item.id === 'type-browser') {
+    // Check if this is a type hint selection (file: or url: or # or rss)
+    if (item.id === 'type-file' || item.id === 'type-url' || item.id === 'type-browser' || item.id === 'type-rss') {
       // Insert the type prefix and keep suggestions visible
-      const typePrefix = item.name; // "file:" or "url:" or "#"
+      const typePrefix = item.name; // "file:" or "url:" or "#" or "rss"
       const newValue = `${beforeMention}@${typePrefix}${afterMention}`;
       setInputValue(newValue);
 
@@ -629,6 +732,37 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ session, onUpdateMessages, onUp
           // Don't update input on error - let parseMentionsAndInjectContent handle it
         }
       })();
+      return;
+    }
+
+    // Handle RSS mention selection
+    if (item.type === 'rss') {
+      setMentionState(prev => ({ ...prev, isVisible: false }));
+
+      let mentionText: string;
+      if (item.id === 'rss-all' || item.name === '@rss' || item.name === '@news') {
+        mentionText = item.name.startsWith('@') ? item.name.slice(1) : 'rss';
+      } else if (item.categoryId) {
+        // Category-based mention
+        const categoryName = item.name.includes(':') ? item.name : `rss:${item.name}`;
+        mentionText = categoryName.startsWith('@') ? categoryName.slice(1) : categoryName;
+      } else if (item.feedId) {
+        // Feed-based mention
+        mentionText = `feed:${item.feedId}`;
+      } else {
+        mentionText = 'rss';
+      }
+
+      const newValue = `${beforeMention}@${mentionText} ${afterMention}`;
+      setInputValue(newValue);
+
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const newCursorPos = beforeMention.length + mentionText.length + 2;
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
       return;
     }
 
@@ -1105,14 +1239,31 @@ ${treeText.slice(0, 3000)}${treeText.length > 3000 ? '\n... (truncated)' : ''}
 `;
   };
 
-  // Parse @file: and @url: and @#tab: mentions and inject their content
+  // Parse @file: and @url: and @#tab: and @rss mentions and inject their content
   const parseMentionsAndInjectContent = async (text: string): Promise<string> => {
+    let processedText = text;
+
+    // First, check for RSS mentions (@rss, @news, @feed:, @rss:category)
+    if (hasRSSMention(text)) {
+      console.log('[RSS] Found RSS mention, processing...');
+      try {
+        const result = await processRSSMention(text);
+        if (result.hasMention) {
+          processedText = result.enrichedMessage;
+          console.log('[RSS] Enriched message with', result.context?.articles.length || 0, 'articles');
+        }
+      } catch (error) {
+        console.error('[RSS] Failed to process RSS mention:', error);
+        processedText = text + `\n\n> ⚠️ Failed to load RSS content: ${error}`;
+      }
+    }
+
     // Regex to match @file:path, @url:url, and @#tab:id mentions
     const mentionRegex = /@(file|url|#tab):([^\s]+)/g;
     const mentions: { match: string; type: 'file' | 'url' | 'browser'; path: string }[] = [];
 
     let match;
-    while ((match = mentionRegex.exec(text)) !== null) {
+    while ((match = mentionRegex.exec(processedText)) !== null) {
       const type = match[1] === '#tab' ? 'browser' : match[1] as 'file' | 'url';
       mentions.push({
         match: match[0],
@@ -1121,11 +1272,11 @@ ${treeText.slice(0, 3000)}${treeText.length > 3000 ? '\n... (truncated)' : ''}
       });
     }
 
-    console.log('[Mentions] Parsing text:', text.slice(0, 100));
+    console.log('[Mentions] Parsing text:', processedText.slice(0, 100));
     console.log('[Mentions] Found mentions:', mentions);
 
     if (mentions.length === 0) {
-      return text;
+      return processedText;
     }
 
     // Fetch content for each mention
@@ -1175,8 +1326,8 @@ ${treeText.slice(0, 3000)}${treeText.length > 3000 ? '\n... (truncated)' : ''}
       }
     }
 
-    // Build the augmented message
-    let augmentedText = text;
+    // Build the augmented message (start with processedText which may have RSS content)
+    let augmentedText = processedText;
 
     // Remove the mention markers from the text and add content at the end
     for (const mention of mentions) {
@@ -1327,6 +1478,14 @@ ${treeText.slice(0, 3000)}${treeText.length > 3000 ? '\n... (truncated)' : ''}
         }).join('');
         textContent = inputValue + attachmentText;
       }
+
+      // Process @mentions (file, url, browser, rss) and inject content
+      try {
+        textContent = await parseMentionsAndInjectContent(textContent);
+      } catch (error) {
+        console.error('Failed to parse mentions in chat mode:', error);
+      }
+
       messageContent = textContent;
     }
 

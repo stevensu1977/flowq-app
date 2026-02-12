@@ -18,6 +18,8 @@ mod db;
 mod mcp;
 mod memory_index;
 mod memory_tool;
+mod rss;
+mod rss_db;
 mod skill;
 
 use chat::{ApiConfig, ChatClient, ChatMessage as SimpleChatMessage, ChatRequest, ChatResponse};
@@ -1752,6 +1754,25 @@ pub fn run() {
             browser_type,
             browser_scroll,
             browser_screenshot,
+            // RSS commands
+            rss::rss_fetch,
+            rss::rss_fetch_and_parse,
+            rss::rss_parse,
+            rss_db::rss_get_feeds,
+            rss_db::rss_create_feed,
+            rss_db::rss_update_feed,
+            rss_db::rss_delete_feed,
+            rss_db::rss_get_categories,
+            rss_db::rss_create_category,
+            rss_db::rss_delete_category,
+            rss_db::rss_upsert_articles,
+            rss_db::rss_get_articles,
+            rss_db::rss_get_recent_articles,
+            rss_db::rss_search_articles,
+            rss_db::rss_mark_article_read,
+            rss_db::rss_toggle_article_starred,
+            rss_db::rss_get_starred_articles,
+            rss_db::rss_cleanup_old_articles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -354,3 +354,151 @@ export const DEFAULT_SKILLS: Omit<Skill, 'id' | 'createdAt' | 'updatedAt'>[] = [
     isBuiltIn: true,
   },
 ];
+
+// ============ RSS Integration Types ============
+
+/**
+ * RSS feed status
+ */
+export type RSSFeedStatus = 'active' | 'paused' | 'error';
+
+/**
+ * RSS category for organizing feeds
+ */
+export interface RSSCategory {
+  id: string;
+  name: string;
+  color?: string;
+  feedCount: number;
+  createdAt: Date;
+}
+
+/**
+ * RSS feed configuration
+ */
+export interface RSSFeed {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  siteUrl?: string;
+  iconUrl?: string;
+
+  // Organization
+  categoryId?: string;
+  tags: string[];
+
+  // State
+  status: RSSFeedStatus;
+  errorMessage?: string;
+  lastFetchedAt?: Date;
+  articleCount: number;
+  unreadCount: number;
+
+  // Cache headers
+  etag?: string;
+  lastModified?: string;
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * RSS enclosure (for podcasts, videos)
+ */
+export interface RSSEnclosure {
+  url: string;
+  type: string;   // audio/mpeg, video/mp4, etc.
+  length?: number;
+}
+
+/**
+ * RSS article/item
+ */
+export interface RSSArticle {
+  id: string;
+  feedId: string;
+
+  // Content
+  title: string;
+  link: string;
+  content: string;       // Full content or description
+  summary?: string;      // AI-generated summary
+  author?: string;
+
+  // Media
+  imageUrl?: string;
+  enclosures?: RSSEnclosure[];
+
+  // Metadata
+  publishedAt: Date;
+  fetchedAt: Date;
+
+  // State
+  isRead: boolean;
+  isStarred: boolean;
+
+  // AI enrichment
+  extractedTopics?: string[];
+  sentiment?: 'positive' | 'neutral' | 'negative';
+}
+
+/**
+ * RSS integration settings
+ */
+export interface RSSIntegration {
+  id: 'rss';
+  name: 'RSS Feeds';
+  type: 'information-source';
+  status: 'active' | 'inactive';
+
+  // Feed management
+  feeds: RSSFeed[];
+  categories: RSSCategory[];
+
+  // Sync settings
+  refreshInterval: number;  // minutes, default 30
+  lastSyncAt?: Date;
+
+  // Storage settings
+  retentionDays: number;    // how long to keep articles, default 30
+  maxArticlesPerFeed: number; // default 100
+}
+
+/**
+ * Default RSS integration settings
+ */
+export const DEFAULT_RSS_INTEGRATION: RSSIntegration = {
+  id: 'rss',
+  name: 'RSS Feeds',
+  type: 'information-source',
+  status: 'inactive',
+  feeds: [],
+  categories: [],
+  refreshInterval: 30,
+  retentionDays: 30,
+  maxArticlesPerFeed: 100,
+};
+
+/**
+ * Suggested RSS feeds by category
+ */
+export const SUGGESTED_RSS_FEEDS = {
+  'Tech News': [
+    { url: 'https://hnrss.org/frontpage', name: 'Hacker News' },
+    { url: 'https://www.theverge.com/rss/index.xml', name: 'The Verge' },
+    { url: 'https://techcrunch.com/feed/', name: 'TechCrunch' },
+    { url: 'https://feeds.arstechnica.com/arstechnica/index', name: 'Ars Technica' },
+  ],
+  'AI & ML': [
+    { url: 'https://openai.com/blog/rss/', name: 'OpenAI Blog' },
+    { url: 'https://blog.google/technology/ai/rss/', name: 'Google AI Blog' },
+    { url: 'https://www.anthropic.com/rss.xml', name: 'Anthropic' },
+    { url: 'https://huggingface.co/blog/feed.xml', name: 'Hugging Face' },
+  ],
+  'Development': [
+    { url: 'https://github.blog/feed/', name: 'GitHub Blog' },
+    { url: 'https://blog.rust-lang.org/feed.xml', name: 'Rust Blog' },
+    { url: 'https://overreacted.io/rss.xml', name: 'Overreacted (Dan Abramov)' },
+  ],
+};
